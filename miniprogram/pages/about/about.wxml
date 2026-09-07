@@ -1,0 +1,30 @@
+<view class="wrap">
+  <view class="card">
+    <view class="title">常旅客助手 ✈️</view>
+    <view class="intro">
+      一个覆盖航司里程/权益/联盟、信用卡积分转点、酒店积分互通的常旅客问答助手，
+      基于 RAG（检索增强生成），答案有据可查。
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="section-title">收录范围</view>
+    <view wx:for="{{coverage}}" wx:key="group" class="cov-group">
+      <view class="cov-label">{{item.group}}</view>
+      <view class="cov-items">
+        <view wx:for="{{item.items}}" wx:for-item="it" wx:key="*this" class="cov-tag">{{it}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="card disclaimer">
+    <view class="section-title">免责声明</view>
+    <view class="disc-text">
+      答案由 AI 基于收录资料生成，可能存在过时、遗漏或错误。里程、积分、权益规则会不定期调整，
+      涉及兑换、转点等操作前，请务必以航司、银行、酒店的官方渠道信息为准。本助手不对据此
+      做出的决策承担责任。
+    </view>
+  </view>
+
+  <view class="footer">ffp-rag · 常旅客 RAG</view>
+</view>

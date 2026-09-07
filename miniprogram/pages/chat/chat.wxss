@@ -1,0 +1,46 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+}
+
+/* 顶栏（固定） */
+.topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18rpx 28rpx;
+  background: var(--surface);
+  border-bottom: 1rpx solid var(--hairline);
+}
+.topbar-title { font-size: 32rpx; font-weight: 600; letter-spacing: 1rpx; }
+
+/* 滚动区（独占滚动，顶栏与发送器固定不动） */
+.scroll { flex: 1; padding: 24rpx 28rpx 0; box-sizing: border-box; }
+
+/* 欢迎空状态 */
+.welcome { text-align: center; padding: 56rpx 0 20rpx; animation: fadeUp .5s var(--ease-spring) both; }
+.welcome-avatar {
+  width: 120rpx; height: 120rpx; line-height: 120rpx;
+  margin: 0 auto 24rpx; font-size: 56rpx; border-radius: 34rpx;
+  background: linear-gradient(135deg, var(--brand), #5ab0ff);
+  animation: breathe 3.4s ease-in-out infinite;
+}
+.welcome-title { font-size: 38rpx; font-weight: 700; }
+.welcome-sub { color: var(--text-weak); font-size: 27rpx; margin-top: 12rpx; }
+
+.popular { margin-top: 44rpx; text-align: left; }
+.chip { border-radius: var(--radius-md); margin-bottom: 16rpx; }
+
+.disclaimer {
+  margin: 30rpx 0 10rpx; font-size: 22rpx;
+  color: var(--text-weak); text-align: center; line-height: 1.5;
+}
+.tail { height: 30rpx; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}

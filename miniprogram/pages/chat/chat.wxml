@@ -1,0 +1,37 @@
+<view class="page">
+  <view class="topbar">
+    <text class="topbar-title">常旅客助手</text>
+    <t-button size="extra-small" variant="outline" theme="primary"
+              shape="round" bindtap="onNewChat" icon="add">新对话</t-button>
+  </view>
+
+  <scroll-view class="scroll" scroll-y scroll-top="{{scrollTop}}" scroll-with-animation>
+    <!-- 空状态：欢迎 + 热门问题 -->
+    <view wx:if="{{messages.length === 0}}" class="welcome">
+      <view class="welcome-avatar">✈️</view>
+      <view class="welcome-title">你好，我是常旅客助手</view>
+      <view class="welcome-sub">问我航司里程 / 权益、信用卡转点、酒店积分互通。</view>
+      <view class="popular">
+        <t-cell wx:for="{{popular}}" wx:key="id" title="{{item.text}}"
+                hover t-class="chip" left-icon="help-circle" arrow
+                data-text="{{item.text}}" bindtap="onTapPopular" />
+      </view>
+    </view>
+
+    <!-- 消息列表：官方 chat-message，pending 自动显示加载动画 -->
+    <t-chat-message wx:for="{{messages}}" wx:key="index"
+                    role="{{item.role}}"
+                    avatar="{{item.role === 'assistant' ? aiAvatar : ''}}"
+                    content="{{item.content}}"
+                    status="{{item.status}}"
+                    placement="{{item.role === 'user' ? 'right' : 'left'}}" />
+
+    <view wx:if="{{messages.length}}" class="disclaimer">{{disclaimer}}</view>
+    <view class="tail"></view>
+  </scroll-view>
+
+  <!-- 官方发送器：多行输入、发送/停止态、回车不误发 -->
+  <t-chat-sender value="{{input}}" placeholder="输入你的问题…"
+                 loading="{{sending}}"
+                 bind:change="onInput" bind:send="onSend" bind:stop="onStop" />
+</view>

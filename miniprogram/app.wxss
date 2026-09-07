@@ -1,0 +1,54 @@
+/* ===== Apple 清爽白 · 设计系统 ===== */
+/* 覆盖 TDesign 主题 token（--td-*）+ 本项目自有变量（--brand 等） */
+page {
+  /* 品牌色 */
+  --brand: #0a84ff;            /* Apple 系蓝 */
+  --brand-deep: #0060df;
+  --brand-light: #eaf3ff;
+  --brand-glow: rgba(10,132,255,0.28);
+
+  /* 中性 */
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --text: #1c1c1e;             /* Apple label */
+  --text-weak: #8e8e93;        /* Apple secondaryLabel */
+  --hairline: rgba(60,60,67,0.12);
+  --ai-bubble: #ffffff;
+
+  /* 圆角 / 阴影（Apple 大圆角 + 柔和层次） */
+  --radius-lg: 24rpx;
+  --radius-md: 18rpx;
+  --shadow-soft: 0 4rpx 24rpx rgba(20,40,80,0.06);
+  --shadow-float: 0 8rpx 28rpx rgba(10,132,255,0.22);
+
+  /* 动效曲线：Apple 惯用 spring 感 */
+  --ease-spring: cubic-bezier(.2,.9,.25,1);
+
+  /* ---- TDesign token 覆盖：让组件也走 Apple 蓝 ---- */
+  --td-brand-color: var(--brand);
+  --td-brand-color-active: var(--brand-deep);
+  --td-brand-color-light: var(--brand-light);
+  --td-radius-default: var(--radius-md);
+  --td-radius-large: var(--radius-lg);
+  --td-bg-color-page: var(--bg);
+  --td-font-size-base: 30rpx;
+
+  background: var(--bg);
+  color: var(--text);
+  font-size: 30rpx;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ===== 全局可复用动效 ===== */
+/* 呼吸：缓慢缩放 + 辉光起伏，用于头像/待机按钮 */
+@keyframes breathe {
+  0%, 100% { transform: scale(1);    box-shadow: 0 6rpx 18rpx var(--brand-glow); }
+  50%      { transform: scale(1.06); box-shadow: 0 10rpx 30rpx var(--brand-glow); }
+}
+/* 呼吸辉光（仅光晕，不缩放） */
+@keyframes breatheGlow {
+  0%, 100% { box-shadow: 0 0 0 0 var(--brand-glow); }
+  50%      { box-shadow: 0 0 0 14rpx rgba(10,132,255,0); }
+}

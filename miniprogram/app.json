@@ -1,0 +1,32 @@
+{
+  "pages": [
+    "pages/chat/chat",
+    "pages/about/about"
+  ],
+  "usingComponents": {
+    "t-chat-content": "tdesign-miniprogram/chat-content/chat-content",
+    "t-chat-message": "tdesign-miniprogram/chat-message/chat-message",
+    "t-chat-sender": "tdesign-miniprogram/chat-sender/chat-sender",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-cell": "tdesign-miniprogram/cell/cell"
+  },
+  "window": {
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "常旅客助手",
+    "backgroundColor": "#f5f6f8"
+  },
+  "tabBar": {
+    "color": "#8e8e93",
+    "selectedColor": "#0a84ff",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      { "pagePath": "pages/chat/chat", "text": "问答" },
+      { "pagePath": "pages/about/about", "text": "关于" }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}
