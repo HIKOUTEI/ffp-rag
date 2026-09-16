@@ -55,9 +55,10 @@ pipeline {
       // 管理后台 SPA。在 node 容器里构建，产物直接落到 OpenResty 的站点根目录。
       // 两个卷都用宿主机绝对路径（见 HOST_WS 的说明）。
       // npm 缓存持久化，避免每次 ci 都重新下载——这台机器只有 1 核。
+      // 缓存目录不必先 mkdir：-v 的宿主机侧不存在时，daemon 会自动建。
+      // （在 Jenkins 容器里 mkdir 反而是错的，那建出来的是容器内的空目录。）
       steps {
         sh '''
-          mkdir -p /opt/ffp-rag/npm-cache
           docker run --rm \
             -v "$HOST_WS/frontend":/src -w /src \
             -v /opt/ffp-rag/npm-cache:/root/.npm \
