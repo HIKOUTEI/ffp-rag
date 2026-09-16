@@ -7,7 +7,7 @@
   直接把 uvicorn 跑在宿主机上。
 - **Jenkins + docker.sock**（选中）：Jenkins 容器里执行 `docker`，由宿主机 daemon 干活。
 
-## 决定
+## 决定一：用 Jenkins + docker.sock
 
 选 Jenkins + docker.sock。理由：
 
@@ -21,21 +21,45 @@
 代价：Jenkins 容器等价于宿主机 root（能操作 docker.sock 就能挂载任意宿主机路径）。
 这台机器只有我一个使用者，接受。
 
-## DooD 的两个坑（都踩过）
+## DooD 的路径坑（踩了两轮）
 
-**一、路径归属不同**。`docker build` 的构建上下文由 **CLI** 读取（Jenkins 容器视角，
-`/var/jenkins_home/...`，正确）；但 `-v` 和 compose `volumes` 的宿主机侧路径由
-**daemon** 解析（宿主机视角）。直接把 `$WORKSPACE` 拿去挂，会指向宿主机上不存在的
-`/var/jenkins_home/...`，docker 不报错、静默建一个空目录——服务能起来、检索却是空的。
-故 `Jenkinsfile` 里用 `HOST_WS` 把容器路径翻译回宿主机路径，compose 里一律写绝对路径。
+DooD 下 compose 的路径有**两种归属**，这是所有麻烦的根源：
 
-**二、`docker compose` 不存在**。1Panel 只挂了 `docker` 主二进制，没挂
-`/usr/libexec/docker/cli-plugins/`，而 compose 是 CLI 插件。首次构建因此失败
-（`unknown shorthand flag: 'd' in -d`——docker 把 `compose up` 当成了主命令的参数）。
-解法是把宿主机的 `docker-compose` 插件复制到 `/var/jenkins_home/.docker/cli-plugins/`
-（`jenkins_home` 是卷，1Panel 升级重建容器也不会丢），并在 `Jenkinsfile` 里设
-`DOCKER_CONFIG=/var/jenkins_home/.docker`。备选方案是改 1Panel 的 Jenkins 容器加挂载，
-但那会被 1Panel 的应用管理覆盖，不如放在卷里稳。
+| 配置 | 谁来解析 | 视角 |
+|---|---|---|
+| `build:` 上下文 | CLI | CLI 所在容器 |
+| `env_file:` | CLI | CLI 所在容器 |
+| `volumes:` 宿主机侧 | daemon | **宿主机** |
+
+**第一轮**：直接把 `$WORKSPACE` 拿去挂。它是 Jenkins 容器视角的
+`/var/jenkins_home/...`，daemon 在宿主机上找不到，于是**不报错、静默建一个空目录**——
+服务能起来、检索却是空的。这是最阴险的一个，因为它不会失败。
+
+**第二轮**：在 Jenkins 容器里跑 `docker compose up -d --build`，连着失败两次：
+
+1. `unknown shorthand flag: 'd' in -d`——1Panel 只挂了 `docker` 主二进制，没挂
+   `/usr/libexec/docker/cli-plugins/`，而 compose 是 CLI 插件，容器里压根没有
+   `docker compose`，`compose up` 被当成了主命令的参数。
+2. 补上插件后：`env file /opt/ffp-rag/.env not found`——`.env` 在宿主机上好好的，
+   但 Jenkins 容器看不见 `/opt/ffp-rag`。
+
+## 决定二：compose CLI 跑在「路径与宿主机一致」的容器里
+
+不在 Jenkins 容器里跑 compose，而是借一个 `docker:cli` 容器，把工作区和
+`/opt/ffp-rag` 都**按宿主机原路径**挂进去，在里面执行 `docker compose up -d --build`。
+这样 CLI 视角与 daemon 视角重合，上表三行全部成立。
+
+否决的备选：
+
+- **给 1Panel 的 Jenkins 容器加挂 `/opt/ffp-rag`**（改
+  `/opt/1panel/apps/jenkins/jenkins/docker-compose.yml`）。一行就能修，但要重启
+  Jenkins（另一个项目的 CI 也在上面），且 1Panel 应用升级时可能把该文件重新生成。
+- **把密钥搬进 Jenkins Credentials，用 `environment:` 注入**。这是标准 CI 做法，
+  但会让密钥的真相源一分为二（`/opt/ffp-rag/.env` 与 Jenkins 各一份），
+  单人单机不值这个复杂度。
+
+代价是多一层嵌套容器需要理解——本 ADR 就是为了让下次不用重新调查一遍。
+`HOST_WS` 仍然保留（`console` 阶段的 `-v` 依然要宿主机路径）。
 
 ## 相关约束
 

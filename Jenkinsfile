@@ -10,11 +10,6 @@ pipeline {
     // 这里翻译成宿主机上的真实路径。
     HOST_WS   = "${env.WORKSPACE.replace('/var/jenkins_home', '/opt/1panel/apps/jenkins/jenkins/data')}"
     SITE_ROOT = '/opt/1panel/www/sites/ffp.hikoutei.cn/index'
-    // 1Panel 只挂了 /usr/bin/docker，没挂 /usr/libexec/docker/cli-plugins，
-    // 而 compose 是 CLI 插件不是主二进制，所以容器里默认没有 `docker compose`。
-    // 插件已复制到 /var/jenkins_home/.docker/cli-plugins/（这是卷，容器重建不丢），
-    // 这里指过去。参见 docs/adr/0006-jenkins-docker-outside-of-docker.md。
-    DOCKER_CONFIG = '/var/jenkins_home/.docker'
   }
 
   options {
@@ -39,10 +34,20 @@ pipeline {
     }
 
     stage('deploy') {
+      // compose 的三类路径归属不同：build 上下文和 env_file 由【CLI】读取，
+      // volumes 由【daemon】解析（宿主机视角）。Jenkins 容器里这两者对不上——
+      // 它看不见 /opt/ffp-rag，`docker compose` 也没有（1Panel 没挂 cli-plugins）。
+      // 所以借一个 docker:cli 容器：把工作区和 /opt/ffp-rag 都按宿主机原路径挂进去，
+      // CLI 与 daemon 的路径语义就一致了。docker-compose.yml 因此不必为 CI 让步。
+      // 详见 docs/adr/0006-jenkins-docker-outside-of-docker.md。
       steps {
-        dir('backend') {
-          sh 'docker compose up -d --build'
-        }
+        sh '''
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v /opt/ffp-rag:/opt/ffp-rag \
+            -v "$HOST_WS/backend":/work -w /work \
+            docker:cli docker compose up -d --build
+        '''
       }
     }
 

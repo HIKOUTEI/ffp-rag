@@ -2,6 +2,12 @@
 # 所以下面的卷路径必须是【宿主机绝对路径】——它们由 daemon 解析，不是由 CLI 解析。
 # 写成 ./chroma_db 会被展开成 /var/jenkins_home/workspace/...，宿主机上不存在，
 # docker 会静默建一个空目录挂进去：服务正常启动，但一条知识都检索不到。
+
+# 项目名默认取工作目录名，CI 里 compose 跑在 /work（见 Jenkinsfile 的 deploy 阶段），
+# 手工部署则在 backend/——两边算出不同的项目名，compose 就认不出对方创建的容器，
+# 报 "container name /ffp-rag is already in use"。钉死，与运行目录解耦。
+name: ffp-rag
+
 services:
   ffp-rag:
     build: .
