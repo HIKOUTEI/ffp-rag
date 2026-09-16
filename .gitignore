@@ -14,6 +14,8 @@ env/
 # ---- 后端运行时数据（向量库 / SQLite 计数库，不入库）----
 backend/chroma_db/
 backend/*.db
+backend/data/
+backend/ingested.jsonl
 *.sqlite3
 
 # ---- 前端 / 小程序 ----

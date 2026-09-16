@@ -1,0 +1,25 @@
+# Jenkins 跑在容器里（socket 与 /usr/bin/docker 已由 1Panel 挂好），
+# 所以下面的卷路径必须是【宿主机绝对路径】——它们由 daemon 解析，不是由 CLI 解析。
+# 写成 ./chroma_db 会被展开成 /var/jenkins_home/workspace/...，宿主机上不存在，
+# docker 会静默建一个空目录挂进去：服务正常启动，但一条知识都检索不到。
+services:
+  ffp-rag:
+    build: .
+    image: ffp-rag:latest
+    container_name: ffp-rag
+    restart: unless-stopped
+    # 只绑 127.0.0.1，公网入口交给 1Panel 的 OpenResty 反向代理
+    ports:
+      - "127.0.0.1:8000:8000"
+    # 机器总共 1.9G 且已在用 swap，给它封顶免得拖垮 Jenkins/MariaDB
+    mem_limit: 600m
+    env_file:
+      - /opt/ffp-rag/.env
+    volumes:
+      - /opt/ffp-rag/data:/app/data
+      - /opt/ffp-rag/chroma_db:/app/chroma_db
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
