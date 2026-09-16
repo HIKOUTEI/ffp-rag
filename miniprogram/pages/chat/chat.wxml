@@ -1,8 +1,7 @@
 <view class="page">
-  <view class="topbar">
-    <text class="topbar-title">常旅客助手</text>
-    <t-button size="extra-small" variant="outline" theme="primary"
-              shape="round" bindtap="onNewChat" icon="add">新对话</t-button>
+  <!-- 新对话：右上角悬浮圆按钮 -->
+  <view wx:if="{{messages.length}}" class="newchat-fab" bindtap="onNewChat">
+    <t-icon name="add" size="40rpx" color="#0a84ff" />
   </view>
 
   <scroll-view class="scroll" scroll-y scroll-top="{{scrollTop}}" scroll-with-animation>
@@ -12,26 +11,39 @@
       <view class="welcome-title">你好，我是常旅客助手</view>
       <view class="welcome-sub">问我航司里程 / 权益、信用卡转点、酒店积分互通。</view>
       <view class="popular">
-        <t-cell wx:for="{{popular}}" wx:key="id" title="{{item.text}}"
-                hover t-class="chip" left-icon="help-circle" arrow
-                data-text="{{item.text}}" bindtap="onTapPopular" />
+        <view class="popular-hint">大家都在问</view>
+        <view class="chip-wrap">
+          <t-tag wx:for="{{popular}}" wx:key="id" theme="primary" variant="light"
+                 size="large" shape="round" t-class="chip"
+                 data-text="{{item.text}}" bindtap="onTapPopular">{{item.text}}</t-tag>
+        </view>
       </view>
     </view>
 
     <!-- 消息列表：官方 chat-message，pending 自动显示加载动画 -->
-    <t-chat-message wx:for="{{messages}}" wx:key="index"
-                    role="{{item.role}}"
-                    avatar="{{item.role === 'assistant' ? aiAvatar : ''}}"
-                    content="{{item.content}}"
-                    status="{{item.status}}"
-                    placement="{{item.role === 'user' ? 'right' : 'left'}}" />
+    <block wx:for="{{messages}}" wx:key="index">
+      <t-chat-message role="{{item.role}}"
+                      avatar="{{item.role === 'assistant' ? aiAvatar : ''}}"
+                      content="{{item.content}}"
+                      status="{{item.status}}"
+                      placement="{{item.role === 'user' ? 'right' : 'left'}}" />
+      <!-- 报错入口：仅对已答完的 AI 回答显示 -->
+      <view wx:if="{{item.role === 'assistant' && item.status === 'complete'}}" class="msg-actions">
+        <view class="report {{item.reported ? 'is-reported' : ''}}"
+              data-index="{{index}}" bindtap="onReport">
+          {{item.reported ? '✓ 已反馈' : '👎 报错'}}
+        </view>
+      </view>
+    </block>
 
     <view wx:if="{{messages.length}}" class="disclaimer">{{disclaimer}}</view>
     <view class="tail"></view>
   </scroll-view>
 
-  <!-- 官方发送器：多行输入、发送/停止态、回车不误发 -->
-  <t-chat-sender value="{{input}}" placeholder="输入你的问题…"
-                 loading="{{sending}}"
-                 bind:change="onInput" bind:send="onSend" bind:stop="onStop" />
+  <!-- 官方发送器：固定在 tabBar 之上，不随滚动移动 -->
+  <view class="sender-fixed">
+    <t-chat-sender value="{{input}}" placeholder="输入你的问题…"
+                   loading="{{sending}}"
+                   bind:change="onInput" bind:send="onSend" bind:stop="onStop" />
+  </view>
 </view>

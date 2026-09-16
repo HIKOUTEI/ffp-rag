@@ -33,6 +33,7 @@ export interface ChatSource {
   score: number
   url: string
   date?: string
+  doc_id?: string
 }
 
 async function post<T>(url: string, body: unknown, auth = false): Promise<T> {
@@ -181,4 +182,43 @@ export async function deleteDoc(id: string) {
 
 export function listChanges() {
   return authGet<{ changes: ChangeItem[] }>('/admin/changelog')
+}
+
+// ---- 纠错队列 ----
+
+export interface CorrectionDoc {
+  id: string
+  text: string
+  meta?: Record<string, string>
+  missing?: boolean
+}
+
+export interface CorrectionItem {
+  id: number
+  question: string
+  rewritten: string
+  answer: string
+  doc_ids: string[]
+  sources: ChatSource[]
+  note: string
+  openid: string
+  status: 'pending' | 'done'
+  resolution: string
+  created_at: string
+  resolved_at: string
+  docs: CorrectionDoc[]   // doc_ids 回填出的当前知识正文
+}
+
+export function listCorrections(status: 'pending' | 'all' = 'pending') {
+  return authGet<{ corrections: CorrectionItem[] }>('/admin/corrections?status=' + status)
+}
+
+export async function resolveCorrection(id: number, resolution: string) {
+  const res = await fetch('/admin/corrections/' + id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + getToken() },
+    body: JSON.stringify({ resolution }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
 }

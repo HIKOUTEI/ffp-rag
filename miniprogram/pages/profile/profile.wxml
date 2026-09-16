@@ -1,0 +1,79 @@
+<view class="wrap">
+  <!-- 头部 -->
+  <view class="hero">
+    <view class="hero-avatar">🧳</view>
+    <view class="hero-title">我的常旅客档案</view>
+    <view class="hero-sub">记录你的航司会籍、酒店会籍与信用卡</view>
+  </view>
+
+  <!-- 三个分区 -->
+  <view wx:for="{{sections}}" wx:key="type" class="section">
+    <view class="section-head">
+      <view class="section-title">
+        <text class="section-icon">{{item.emoji}}</text>
+        <text>{{item.title}}</text>
+      </view>
+      <view class="section-add" bindtap="onAdd" data-type="{{item.type}}">
+        <t-icon name="add" size="36rpx" color="#0a84ff" />
+      </view>
+    </view>
+
+    <t-cell-group wx:if="{{item.entries.length}}" theme="card">
+      <t-swipe-cell wx:for="{{item.entries}}" wx:for-item="entry" wx:key="id"
+                    data-type="{{item.type}}" data-id="{{entry.id}}">
+        <t-cell title="{{entry.brand}}" description="{{entry.extra}}" hover
+                bindtap="onEdit" data-type="{{item.type}}" data-id="{{entry.id}}">
+          <t-tag slot="note" theme="primary" variant="light" size="medium">{{entry.tier}}</t-tag>
+        </t-cell>
+        <view slot="right" class="swipe-del" bindtap="onDelete"
+              data-type="{{item.type}}" data-id="{{entry.id}}">删除</view>
+      </t-swipe-cell>
+    </t-cell-group>
+
+    <t-empty wx:else icon="add-circle" description="{{item.emptyHint}}" class="empty" />
+  </view>
+
+  <view class="footer">档案仅保存在本机，不上传</view>
+</view>
+
+<!-- 录入 / 编辑：底部弹出面板 -->
+<t-popup visible="{{formVisible}}" placement="bottom" bind:visible-change="onFormClose">
+  <view class="form">
+    <view class="form-title">{{editing ? '编辑' : '新增'}}{{formTitle}}</view>
+
+    <t-cell title="{{brandLabel}}" arrow hover note="{{form.brand || '请选择'}}"
+            bindtap="openBrandPicker" />
+    <t-cell title="等级/卡种" arrow hover note="{{form.tier || '请选择'}}"
+            bindtap="openTierPicker" />
+    <t-cell wx:if="{{isCard}}" title="积分体系" arrow hover note="{{form.points || '可选'}}"
+            bindtap="openPointsPicker" />
+    <t-input wx:else label="{{idLabel}}" placeholder="可选" value="{{form.idno}}"
+             bind:change="onIdInput" />
+    <t-input wx:if="{{form.brand === otherLabel}}" label="名称" placeholder="手动输入品牌名"
+             value="{{form.brandOther}}" bind:change="onBrandOtherInput" />
+
+    <view class="form-actions">
+      <t-button theme="light" size="large" bindtap="onFormCancel" t-class="btn-half">取消</t-button>
+      <t-button theme="primary" size="large" bindtap="onSave" t-class="btn-half"
+                disabled="{{!canSave}}">保存</t-button>
+    </view>
+  </view>
+</t-popup>
+
+<!-- 品牌选择器 -->
+<t-picker visible="{{brandPickerVisible}}" value="{{brandPickerValue}}" title="选择品牌"
+          bind:confirm="onBrandConfirm" bind:cancel="onPickerCancel">
+  <t-picker-item options="{{brandOptions}}" />
+</t-picker>
+
+<!-- 等级选择器 -->
+<t-picker visible="{{tierPickerVisible}}" value="{{tierPickerValue}}" title="选择等级/卡种"
+          bind:confirm="onTierConfirm" bind:cancel="onPickerCancel">
+  <t-picker-item options="{{tierOptions}}" />
+</t-picker>
+
+<!-- 积分体系选择器 -->
+<t-picker visible="{{pointsPickerVisible}}" value="{{pointsPickerValue}}" title="选择积分体系"
+          bind:confirm="onPointsConfirm" bind:cancel="onPickerCancel">
+  <t-picker-item options="{{pointsOptions}}" />
+</t-picker>

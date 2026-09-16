@@ -1,6 +1,7 @@
 {
   "pages": [
     "pages/chat/chat",
+    "pages/profile/profile",
     "pages/about/about"
   ],
   "usingComponents": {
@@ -9,7 +10,8 @@
     "t-chat-sender": "tdesign-miniprogram/chat-sender/chat-sender",
     "t-button": "tdesign-miniprogram/button/button",
     "t-icon": "tdesign-miniprogram/icon/icon",
-    "t-cell": "tdesign-miniprogram/cell/cell"
+    "t-cell": "tdesign-miniprogram/cell/cell",
+    "t-tag": "tdesign-miniprogram/tag/tag"
   },
   "window": {
     "navigationBarBackgroundColor": "#ffffff",
@@ -18,12 +20,14 @@
     "backgroundColor": "#f5f6f8"
   },
   "tabBar": {
+    "custom": true,
     "color": "#8e8e93",
     "selectedColor": "#0a84ff",
     "backgroundColor": "#ffffff",
     "borderStyle": "white",
     "list": [
       { "pagePath": "pages/chat/chat", "text": "问答" },
+      { "pagePath": "pages/profile/profile", "text": "我的" },
       { "pagePath": "pages/about/about", "text": "关于" }
     ]
   },

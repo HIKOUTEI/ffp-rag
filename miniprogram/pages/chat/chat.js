@@ -1,4 +1,4 @@
-const { conversationStream, popularQuestions } = require('../../api')
+const { conversationStream, popularQuestions, reportCorrection } = require('../../api')
 
 const STORE_KEY = 'ffp_current_conversation'
 // AI 头像用 base64 的小飞机 emoji 不便，用一张远程/本地图；这里用 data URI 占位
@@ -6,7 +6,9 @@ const AI_AVATAR = 'https://tdesign.gtimg.com/site/chat-avatar.png'
 
 Page({
   data: {
-    messages: [],       // [{role, content:[{type:'markdown',data}], status}]
+    // [{role, content:[{type:'markdown',data}], status, question?, rewritten?, sources?, reported?}]
+    // question/rewritten/sources 只挂在 AI 消息上，供报错时上传快照（ADR-0005）
+    messages: [],
     input: '',
     sending: false,
     popular: [],
@@ -22,6 +24,12 @@ Page({
       this.scrollToBottom()
     } else {
       this.loadPopular()
+    }
+  },
+
+  onShow() {
+    if (typeof this.getTabBar === 'function' && this.getTabBar()) {
+      this.getTabBar().setActive('pages/chat/chat')
     }
   },
 
@@ -59,7 +67,11 @@ Page({
     if (this.data.sending) return
     const userMsg = { role: 'user', content: [{ type: 'text', data: text }] }
     // AI 占位：status=pending 时组件自动显示加载动画
-    const aiMsg = { role: 'assistant', content: [{ type: 'markdown', data: '' }], status: 'pending' }
+    // question/sources 随流式事件回填，供之后报错时上传
+    const aiMsg = {
+      role: 'assistant', content: [{ type: 'markdown', data: '' }], status: 'pending',
+      question: text, rewritten: '', sources: [], reported: false,
+    }
     const messages = this.data.messages.concat([userMsg, aiMsg])
     const aiIndex = messages.length - 1
 
@@ -74,6 +86,12 @@ Page({
 
     let acc = ''
     this.task = conversationStream(wire, {
+      onRewritten: (t) => {
+        this.patchAi(aiIndex, { rewritten: t })
+      },
+      onSources: (list) => {
+        this.patchAi(aiIndex, { sources: list || [] })
+      },
       onDelta: (delta) => {
         acc += delta
         this.patchAi(aiIndex, { 'content[0].data': acc, status: 'complete' })
@@ -87,6 +105,40 @@ Page({
         const msg = '⚠️ ' + (err.message || '出错了，请重试')
         this.patchAi(aiIndex, { 'content[0].data': msg, status: 'error' })
         this.finish()
+      },
+    })
+  },
+
+  // 点「👎 报错」：收一句选填说明，连同问答快照上报（ADR-0005）。
+  // 说明不强制——摩擦越低上报量越大，空白条目由管理员自行判断。
+  onReport(e) {
+    const i = e.currentTarget.dataset.index
+    const msg = this.data.messages[i]
+    if (!msg || msg.reported) return
+
+    wx.showModal({
+      title: '哪里不对？',
+      editable: true,
+      placeholderText: '选填，写一句能帮我们更快修正',
+      confirmText: '提交',
+      success: (res) => {
+        if (!res.confirm) return
+        const sources = msg.sources || []
+        reportCorrection({
+          question: msg.question || '',
+          rewritten: msg.rewritten || '',
+          answer: msg.content.map((c) => c.data).join(''),
+          doc_ids: sources.map((s) => s.doc_id).filter((id) => !!id),
+          sources,
+          note: (res.content || '').trim(),
+        }).then(() => {
+          // messages 本就会写进 Storage，标记随之持久化
+          this.patchAi(i, { reported: true })
+          wx.setStorageSync(STORE_KEY, this.data.messages)
+          wx.showToast({ title: '已收到，感谢反馈', icon: 'none' })
+        }).catch((err) => {
+          wx.showToast({ title: err.message || '提交失败', icon: 'none' })
+        })
       },
     })
   },

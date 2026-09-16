@@ -9,12 +9,21 @@ class ChatRequest(BaseModel):
     top_k: int = 4
 
 
+class LoginRequest(BaseModel):
+    code: str      # 小程序 wx.login 拿到的一次性 code
+
+
+class LoginResponse(BaseModel):
+    token: str
+
+
 class Source(BaseModel):
     domain: str
     source: str
     score: float
     url: str = ""
     date: str = ""
+    doc_id: str = ""   # 库中正文片段 id，供纠错记录关联（见 ADR-0005）
 
 
 class ChatResponse(BaseModel):
@@ -93,3 +102,19 @@ class IngestParsedResponse(BaseModel):
 
 class UpdateDocRequest(BaseModel):
     text: str
+
+
+# ---- 纠错记录 ----
+
+class CorrectionRequest(BaseModel):
+    """用户对一条 AI 回答的报错。快照由前端上传（见 ADR-0005）。"""
+    question: str
+    rewritten: str = ""
+    answer: str = ""
+    doc_ids: List[str] = []          # 本次命中的知识条目 id，空 = 库里没有对应知识
+    sources: List[Source] = []       # 来源标签快照
+    note: str = ""                   # 用户说明，选填
+
+
+class ResolveCorrectionRequest(BaseModel):
+    resolution: str = ""             # 管理员的处理备注

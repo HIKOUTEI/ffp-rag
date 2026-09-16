@@ -16,7 +16,7 @@ import threading
 from app import config, rag
 from app.templates import TEMPLATES
 
-DB_PATH = os.path.join(config.BACKEND_DIR, "popular.db")
+DB_PATH = os.path.join(config.DATA_DIR, "popular.db")
 THRESHOLD = 0.80  # cosine 相似度阈值，低于则不计入热门榜
 
 _lock = threading.Lock()

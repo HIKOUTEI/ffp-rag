@@ -1,7 +1,9 @@
 """Chroma 持久化向量库封装。我们自己用 provider 的 embedding，故禁用 Chroma 自带 embedding。"""
 import glob
+import json
 import os
 import threading
+import uuid
 
 import chromadb
 
@@ -96,6 +98,22 @@ def ingest():
     return len(chunks)
 
 
+INGESTED_BACKUP = os.path.join(config.DATA_DIR, "ingested.jsonl")
+_backup_lock = threading.Lock()
+
+
+def _backup_fragments(doc_ids, doc_metas, doc_texts):
+    """把入库片段 append 到 jsonl 备份（ADR-0004）。失败不影响主链路。"""
+    try:
+        os.makedirs(config.CORPUS_DIR, exist_ok=True)
+        with _backup_lock, open(INGESTED_BACKUP, "a", encoding="utf-8") as fp:
+            for _id, meta, text in zip(doc_ids, doc_metas, doc_texts):
+                rec = {"id": _id, "text": text, **meta}
+                fp.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
 def add_fragments(fragments, with_aliases=True, async_aliases=True):
     """向已有集合追加片段（不清空）。每条知识写入正文向量（同步，立即可检索）；
     别名问法默认后台异步生成（不阻塞入库）。
@@ -105,14 +123,13 @@ def add_fragments(fragments, with_aliases=True, async_aliases=True):
     col = client.get_or_create_collection(name=config.COLLECTION, embedding_function=None)
     if not fragments:
         return 0, col.count()
-    base = col.count()
 
-    # 1) 写入正文向量
+    # 1) 写入正文向量。ID 用 uuid，避免依赖 col.count()（含别名且删除后会变小 → 撞车）。
     doc_texts = [f["text"] for f in fragments]
     doc_embeds = embed(doc_texts)
     doc_ids, doc_metas = [], []
     for i, f in enumerate(fragments):
-        doc_ids.append(f"frag-{base}-{i}")
+        doc_ids.append(f"frag-{uuid.uuid4().hex}")
         doc_metas.append({
             "domain": f.get("domain", "other"),
             "subject": f.get("subject", ""),
@@ -123,6 +140,9 @@ def add_fragments(fragments, with_aliases=True, async_aliases=True):
             "kind": "doc",
         })
     col.add(ids=doc_ids, embeddings=doc_embeds, documents=doc_texts, metadatas=doc_metas)
+
+    # 1.5) 摄入即备份：把片段（text+meta）append 到 jsonl，向量库不再是唯一真相（ADR-0004）。
+    _backup_fragments(doc_ids, doc_metas, doc_texts)
 
     # 2) 别名问法：默认后台异步生成（不阻塞入库，正文已可检索）
     if with_aliases:
@@ -199,27 +219,32 @@ def _build_aliases(payload):
 
 
 def search(query, top_k=None):
-    """检索 -> list[dict(domain, source, text, score, url, date)]。
-    命中别名问法时回查其指向的正文；按正文去重，保留最高分。"""
+    """检索 -> list[dict(doc_id, domain, source, text, score, url, date)]。
+    命中别名问法时回查其指向的正文；按正文去重，保留最高分。
+    doc_id 是正文片段在库中的 id（别名命中时取其 parent_id），供纠错记录关联。"""
     top_k = top_k or config.TOP_K
     col = get_collection()
     qv = embed([query])[0]
     # 多取一些（别名会挤占名额，回查去重后收敛）
     res = col.query(query_embeddings=[qv], n_results=top_k * 3)
+    ids = res["ids"][0]
     docs = res["documents"][0]
     metas = res["metadatas"][0]
     dists = res["distances"][0]
 
     best = {}  # 正文文本 -> 记录（保留最高分）
-    for doc, meta, dist in zip(docs, metas, dists):
+    for _id, doc, meta, dist in zip(ids, docs, metas, dists):
         score = round(1 - dist, 4)
         if meta.get("kind") == "alias":
             text = meta.get("parent_text", doc)  # 回查正文
+            doc_id = meta.get("parent_id", "")
         else:
             text = doc
+            doc_id = _id
         prev = best.get(text)
         if prev is None or score > prev["score"]:
             best[text] = {
+                "doc_id": doc_id,
                 "domain": meta.get("domain", "?"),
                 "source": meta.get("source", "?"),
                 "text": text,

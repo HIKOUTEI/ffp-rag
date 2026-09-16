@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from app import config, rag, store, ingest_url, popular, changelog
+from app import config, rag, store, ingest_url, popular, changelog, auth
 from app import health as health_mod
 from app.schemas import (
     ChatRequest, ChatResponse, Source,
@@ -13,6 +13,8 @@ from app.schemas import (
     IngestParsedRequest, IngestParsedResponse, UpdateDocRequest,
     ConversationRequest, ConversationResponse,
     PopularQuestion, PopularQuestionsResponse,
+    LoginRequest, LoginResponse,
+    CorrectionRequest, ResolveCorrectionRequest,
 )
 
 app = FastAPI(title="常旅客 RAG 后端", version="0.1.0")
@@ -52,6 +54,13 @@ def _require_admin(authorization: str):
         raise HTTPException(401, "未授权：ADMIN_TOKEN 不匹配。")
 
 
+def _source_dict(r):
+    """检索结果 → 前端来源标签。带 doc_id 是为了让用户报错时能指回库中知识（ADR-0005）。"""
+    return {"domain": r["domain"], "source": r["source"], "score": r["score"],
+            "url": r.get("url", ""), "date": r.get("date", ""),
+            "doc_id": r.get("doc_id", "")}
+
+
 @app.get("/health")
 def health():
     ok = config.API_KEY is not None
@@ -63,19 +72,27 @@ def health():
             "provider": config.PROVIDER, "chunks": count}
 
 
+@app.post("/auth/login", response_model=LoginResponse)
+def auth_login(req: LoginRequest):
+    """小程序登录：code → openid → 签发 token。"""
+    token = auth.login(req.code)
+    return LoginResponse(token=token)
+
+
 @app.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest):
+def chat(req: ChatRequest, authorization: str = Header(None)):
+    auth.require_user_with_quota(authorization)
     _check_ready()
     retrieved = store.search(req.question, req.top_k)
     answer = rag.generate(req.question, retrieved)
-    sources = [Source(domain=r["domain"], source=r["source"], score=r["score"], url=r.get("url", ""), date=r.get("date", ""))
-               for r in retrieved]
+    sources = [Source(**_source_dict(r)) for r in retrieved]
     return ChatResponse(answer=answer, sources=sources)
 
 
 @app.post("/chat/conversation", response_model=ConversationResponse)
-def chat_conversation(req: ConversationRequest):
+def chat_conversation(req: ConversationRequest, authorization: str = Header(None)):
     """多轮对话：改写追问→检索→带历史生成。messages 最后一条为用户最新问题。"""
+    auth.require_user_with_quota(authorization)
     _check_ready()
     if not req.messages:
         raise HTTPException(422, "messages 不能为空。")
@@ -89,15 +106,15 @@ def chat_conversation(req: ConversationRequest):
     answer = rag.generate_with_history(history, latest, retrieved)
     # 只把「足够相关」的结果作为来源展示：低分结果是检索凑数的、AI 并未采用，
     # 若都不相关（答案会是「资料里没有」），来源应为空而非挂一堆无关低分项。
-    sources = [Source(domain=r["domain"], source=r["source"], score=r["score"], url=r.get("url", ""), date=r.get("date", ""))
-               for r in retrieved if r["score"] >= SOURCE_MIN]
+    sources = [Source(**_source_dict(r)) for r in retrieved if r["score"] >= SOURCE_MIN]
     popular.record(latest)
     return ConversationResponse(answer=answer, sources=sources, rewritten=rewritten)
 
 
 @app.post("/chat/conversation/stream")
-def chat_conversation_stream(req: ConversationRequest):
+def chat_conversation_stream(req: ConversationRequest, authorization: str = Header(None)):
     """多轮 + 追问改写 + SSE 流式。事件序列：rewritten → sources → delta* → done。"""
+    auth.require_user_with_quota(authorization)
     _check_ready()
     if not req.messages:
         raise HTTPException(422, "messages 不能为空。")
@@ -110,8 +127,7 @@ def chat_conversation_stream(req: ConversationRequest):
     def event_gen():
         yield f"event: rewritten\ndata: {json.dumps({'text': rewritten}, ensure_ascii=False)}\n\n"
         # 与非流式一致：只推送足够相关的来源，避免展示 AI 未采用的低分项
-        sources = [{"domain": r["domain"], "source": r["source"], "score": r["score"], "url": r.get("url", ""), "date": r.get("date", "")}
-                   for r in retrieved if r["score"] >= SOURCE_MIN]
+        sources = [_source_dict(r) for r in retrieved if r["score"] >= SOURCE_MIN]
         yield f"event: sources\ndata: {json.dumps(sources, ensure_ascii=False)}\n\n"
         for delta in rag.generate_with_history_stream(history, latest, retrieved):
             yield f"event: delta\ndata: {json.dumps({'text': delta}, ensure_ascii=False)}\n\n"
@@ -131,14 +147,14 @@ def popular_questions(n: int = 4):
 
 
 @app.post("/chat/stream")
-def chat_stream(req: ChatRequest):
+def chat_stream(req: ChatRequest, authorization: str = Header(None)):
+    auth.require_user_with_quota(authorization)
     _check_ready()
     retrieved = store.search(req.question, req.top_k)
 
     def event_gen():
         # 1) 先推送来源
-        sources = [{"domain": r["domain"], "source": r["source"], "score": r["score"], "url": r.get("url", ""), "date": r.get("date", "")}
-                   for r in retrieved]
+        sources = [_source_dict(r) for r in retrieved]
         yield f"event: sources\ndata: {json.dumps(sources, ensure_ascii=False)}\n\n"
         # 2) 逐段推送回答
         for delta in rag.generate_stream(req.question, retrieved):
@@ -147,6 +163,21 @@ def chat_stream(req: ChatRequest):
         yield "event: done\ndata: {}\n\n"
 
     return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+# ---- 纠错记录 ----
+
+@app.post("/feedback/correction")
+def report_correction(req: CorrectionRequest, authorization: str = Header(None)):
+    """用户给一条 AI 回答报错。快照由前端上传（ADR-0005）。
+    走独立的报错日额度，不消耗提问次数。"""
+    openid = auth.require_user_with_feedback_quota(authorization)
+    changelog.record_correction(
+        question=req.question, rewritten=req.rewritten, answer=req.answer,
+        doc_ids=req.doc_ids, sources=[s.model_dump() for s in req.sources],
+        note=req.note, openid=openid,
+    )
+    return {"ok": True}
 
 
 # ---- 管理员：URL 摄入管线 ----
@@ -251,6 +282,38 @@ def admin_changelog(limit: int = 100, authorization: str = Header(None)):
     """全库变更流水。"""
     _require_admin(authorization)
     return {"changes": changelog.list_changes(limit)}
+
+
+# ---- 管理员：纠错队列 ----
+
+@app.get("/admin/corrections")
+def admin_corrections(status: str = "pending", limit: int = 100,
+                      authorization: str = Header(None)):
+    """纠错队列。默认只列待处理；status=all 看全部。
+    每条把 doc_ids 回填成当前知识正文，便于后台就地编辑。"""
+    _require_admin(authorization)
+    items = changelog.list_corrections(status, limit)
+    for it in items:
+        docs = []
+        for doc_id in it["doc_ids"]:
+            try:
+                d = store.get_doc(doc_id)
+            except Exception:
+                d = None
+            # 知识可能已被删除——标记缺失而不是整条报错
+            docs.append(d if d else {"id": doc_id, "text": "", "missing": True})
+        it["docs"] = docs
+    return {"corrections": items}
+
+
+@app.patch("/admin/corrections/{correction_id}")
+def admin_resolve_correction(correction_id: int, req: ResolveCorrectionRequest,
+                             authorization: str = Header(None)):
+    """标记一条纠错记录为已处理，并记下处理备注。"""
+    _require_admin(authorization)
+    if not changelog.resolve_correction(correction_id, req.resolution):
+        raise HTTPException(404, "纠错记录不存在或已处理。")
+    return {"ok": True}
 
 
 # ---- 管理员：知识库体检 ----

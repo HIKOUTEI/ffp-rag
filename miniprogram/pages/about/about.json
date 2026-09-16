@@ -1,4 +1,9 @@
 {
   "navigationBarTitleText": "关于",
-  "usingComponents": {}
+  "usingComponents": {
+    "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
+    "t-cell": "tdesign-miniprogram/cell/cell",
+    "t-tag": "tdesign-miniprogram/tag/tag",
+    "t-divider": "tdesign-miniprogram/divider/divider"
+  }
 }

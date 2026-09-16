@@ -32,6 +32,14 @@ CFG = PROVIDERS[PROVIDER]
 API_KEY = os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN")
 
+# 微信小程序登录（code2session 换 openid）。AppSecret 为服务端密钥，只放 .env。
+WX_APPID = os.getenv("WX_APPID")
+WX_APPSECRET = os.getenv("WX_APPSECRET")
+# 每个用户（openid）每日问答次数上限；0 表示不限每日额度。
+DAILY_LIMIT = int(os.getenv("DAILY_LIMIT", "50"))
+# 每个用户每日报错次数上限，与问答额度相互独立；0 表示不限。
+FEEDBACK_DAILY_LIMIT = int(os.getenv("FEEDBACK_DAILY_LIMIT", "10"))
+
 CHAT_MODEL = CFG["chat_model"]
 EMBED_MODEL = CFG["embed_model"]
 BASE_URL = CFG["base_url"]
@@ -40,6 +48,10 @@ BASE_URL = CFG["base_url"]
 _HERE = os.path.dirname(os.path.abspath(__file__))
 BACKEND_DIR = os.path.dirname(_HERE)
 CORPUS_DIR = os.path.join(BACKEND_DIR, "corpus")
-CHROMA_DIR = os.path.join(BACKEND_DIR, "chroma_db")
+CHROMA_DIR = os.getenv("CHROMA_DIR") or os.path.join(BACKEND_DIR, "chroma_db")
+# 可变状态（三个 sqlite + 摄入备份）集中放这里，容器部署时挂成一个卷。
+# 默认仍是 BACKEND_DIR，本地开发的既有文件位置不变。
+DATA_DIR = os.getenv("DATA_DIR") or BACKEND_DIR
+os.makedirs(DATA_DIR, exist_ok=True)
 COLLECTION = "freq_flyer"
 TOP_K = 4

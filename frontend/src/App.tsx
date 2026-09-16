@@ -6,8 +6,9 @@ import {
   startParseUrl, pollParseUrl, ingestParsed, chatConversation, getToken, setToken,
   startHealthCheck, pollHealthCheck,
   listDocs, updateDoc, deleteDoc, listChanges,
+  listCorrections, resolveCorrection,
   type Fragment, type ChatSource, type ChatMessage, type HealthReport,
-  type DocItem, type ChangeItem,
+  type DocItem, type ChangeItem, type CorrectionItem,
 } from './api'
 
 const DOMAINS = ['airline', 'credit_card', 'hotel', 'other']
@@ -196,6 +197,56 @@ export default function App() {
     } catch (e) { setMsg({ type: 'err', text: '删除失败：' + (e as Error).message }) }
   }
 
+  // ---- 纠错队列 ----
+  const [showCorr, setShowCorr] = useState(false)
+  const [corrStatus, setCorrStatus] = useState<'pending' | 'all'>('pending')
+  const [corrections, setCorrections] = useState<CorrectionItem[]>([])
+  const [corrOpen, setCorrOpen] = useState<Record<number, boolean>>({})
+  const [corrEdit, setCorrEdit] = useState<Record<string, string>>({})  // doc_id -> 编辑中的正文
+  const [corrNote, setCorrNote] = useState<Record<number, string>>({})  // 处理备注
+
+  async function loadCorrections(status = corrStatus) {
+    try {
+      const r = await listCorrections(status)
+      setCorrections(r.corrections)
+    } catch (e) { setMsg({ type: 'err', text: '加载纠错失败：' + (e as Error).message }) }
+  }
+
+  async function toggleCorr() {
+    const next = !showCorr
+    setShowCorr(next)
+    if (next) await loadCorrections()
+  }
+
+  async function switchCorrStatus(s: 'pending' | 'all') {
+    setCorrStatus(s)
+    await loadCorrections(s)
+  }
+
+  // 纠错卡片内就地保存关联知识：复用知识管理的 updateDoc，改完两处列表都刷新
+  async function saveCorrDoc(docId: string) {
+    const text = corrEdit[docId]
+    if (text === undefined) return
+    try {
+      await updateDoc(docId, text)
+      setMsg({ type: 'ok', text: '已保存修改' })
+      setCorrEdit(e => { const n = { ...e }; delete n[docId]; return n })
+      await loadCorrections()
+      if (showManage) await loadManage()
+    } catch (e) { setMsg({ type: 'err', text: '保存失败：' + (e as Error).message }) }
+  }
+
+  async function markResolved(id: number) {
+    try {
+      await resolveCorrection(id, corrNote[id] || '')
+      setMsg({ type: 'ok', text: '已标记处理' })
+      setCorrNote(n => { const x = { ...n }; delete x[id]; return x })
+      await loadCorrections()
+    } catch (e) { setMsg({ type: 'err', text: '标记失败：' + (e as Error).message }) }
+  }
+
+  const pendingCount = corrections.filter(c => c.status === 'pending').length
+
   // 来源按 url 去重
   function uniqSources(sources: ChatSource[]) {
     const seen = new Set<string>()
@@ -292,6 +343,134 @@ export default function App() {
               {hcReport.summary.stale_count === 0 && hcReport.summary.gap_count === 0 && hcReport.summary.conflict_count === 0 && (
                 <div className="text-xs text-emerald-300">✓ 未发现问题，知识库很健康</div>
               )}
+            </motion.div>
+          )}
+        </Card>
+
+        <Card>
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-slate-400">
+              纠错队列 · 用户报错 → 修正知识
+              {showCorr && pendingCount > 0 && (
+                <span className="ml-2 rounded-full bg-rose-500/20 text-rose-300 px-2 py-0.5">
+                  {pendingCount} 待处理
+                </span>
+              )}
+            </div>
+            <button
+              onClick={toggleCorr}
+              className="rounded-lg px-4 py-1.5 text-sm font-medium bg-slate-600 hover:bg-slate-500 transition"
+            >
+              {showCorr ? '收起' : '打开'}
+            </button>
+          </div>
+
+          {showCorr && (
+            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="mt-3 space-y-3">
+              <div className="flex gap-2 text-xs">
+                {(['pending', 'all'] as const).map(s => (
+                  <button
+                    key={s} onClick={() => switchCorrStatus(s)}
+                    className={`rounded-full px-2.5 py-1 transition ${corrStatus === s
+                      ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                      : 'bg-slate-700/40 text-slate-400 hover:text-slate-300'}`}
+                  >
+                    {s === 'pending' ? '待处理' : '全部'}
+                  </button>
+                ))}
+              </div>
+
+              {corrections.length === 0 && (
+                <div className="text-xs text-emerald-300">✓ 没有待处理的报错</div>
+              )}
+
+              <ul className="space-y-2">
+                {corrections.map(c => (
+                  <li key={c.id} className="rounded-lg bg-slate-800/60 border border-slate-700/60 px-3 py-2">
+                    <div
+                      className="cursor-pointer"
+                      onClick={() => setCorrOpen(o => ({ ...o, [c.id]: !o[c.id] }))}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="text-xs text-slate-200">{c.question}</div>
+                        <div className="shrink-0 text-[10px] text-slate-500">{c.created_at}</div>
+                      </div>
+                      {c.note
+                        ? <div className="mt-1 text-xs text-rose-300">用户说：{c.note}</div>
+                        : <div className="mt-1 text-xs text-slate-500">（用户未填说明）</div>}
+                      {c.status === 'done' && (
+                        <div className="mt-1 text-xs text-emerald-400">
+                          ✓ 已处理{c.resolution ? '：' + c.resolution : ''}
+                        </div>
+                      )}
+                    </div>
+
+                    {corrOpen[c.id] && (
+                      <div className="mt-2 space-y-2 border-t border-slate-700/60 pt-2">
+                        {c.rewritten && c.rewritten !== c.question && (
+                          <div className="text-[11px] text-slate-500">检索问题：{c.rewritten}</div>
+                        )}
+                        <div className="text-xs text-slate-400 whitespace-pre-wrap max-h-40 overflow-y-auto rounded-md bg-slate-900/60 px-2 py-1.5">
+                          {c.answer || '（无回答快照）'}
+                        </div>
+
+                        {c.docs.length === 0 ? (
+                          <div className="text-xs text-amber-300 rounded-md bg-amber-500/10 border border-amber-500/30 px-2.5 py-1.5">
+                            无关联知识（可能是库里缺这条）—— 考虑走上面的 URL 摄入补录
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="text-[11px] font-medium text-slate-400">命中的知识（可就地修改）</div>
+                            {c.docs.map(d => d.missing ? (
+                              <div key={d.id} className="text-xs text-slate-500 italic">
+                                {d.id} —— 已被删除
+                              </div>
+                            ) : (
+                              <div key={d.id} className="rounded-md bg-slate-900/60 px-2 py-1.5">
+                                <textarea
+                                  value={corrEdit[d.id] !== undefined ? corrEdit[d.id] : d.text}
+                                  onChange={e => setCorrEdit(s => ({ ...s, [d.id]: e.target.value }))}
+                                  rows={3}
+                                  className="w-full bg-transparent text-xs text-slate-300 outline-none resize-y"
+                                />
+                                <div className="flex items-center gap-3 mt-1">
+                                  <span className="text-[10px] text-slate-500">{d.meta?.source}</span>
+                                  {corrEdit[d.id] !== undefined && (
+                                    <>
+                                      <button onClick={() => saveCorrDoc(d.id)} className="text-xs text-emerald-400 hover:text-emerald-300">保存</button>
+                                      <button
+                                        onClick={() => setCorrEdit(s => { const n = { ...s }; delete n[d.id]; return n })}
+                                        className="text-xs text-slate-500 hover:text-slate-400"
+                                      >取消</button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {c.status === 'pending' && (
+                          <div className="flex gap-2">
+                            <input
+                              value={corrNote[c.id] || ''}
+                              onChange={e => setCorrNote(n => ({ ...n, [c.id]: e.target.value }))}
+                              placeholder="处理备注：改了什么 / 为什么不用改"
+                              className="flex-1 rounded-md bg-slate-900/60 border border-slate-700 px-2 py-1 text-xs outline-none focus:border-sky-500"
+                            />
+                            <button
+                              onClick={() => markResolved(c.id)}
+                              className="rounded-md px-3 py-1 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 transition"
+                            >
+                              标记已处理
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </motion.div>
           )}
         </Card>

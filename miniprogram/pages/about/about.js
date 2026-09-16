@@ -6,4 +6,9 @@ Page({
       { group: '酒店', items: ['希尔顿荣誉客会', '万豪旅享家'] },
     ],
   },
+  onShow() {
+    if (typeof this.getTabBar === 'function' && this.getTabBar()) {
+      this.getTabBar().setActive('pages/about/about')
+    }
+  },
 })
