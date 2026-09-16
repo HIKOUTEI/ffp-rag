@@ -3,6 +3,15 @@
 pipeline {
   agent any
 
+  environment {
+    // Jenkins 在容器里，但 docker 命令由【宿主机的 daemon】执行：
+    // -v 的路径是宿主机视角。WORKSPACE 是容器视角（/var/jenkins_home/...），
+    // 直接拿来挂会指向宿主机上不存在的路径，docker 则静默建个空目录。
+    // 这里翻译成宿主机上的真实路径。
+    HOST_WS   = "${env.WORKSPACE.replace('/var/jenkins_home', '/opt/1panel/apps/jenkins/jenkins/data')}"
+    SITE_ROOT = '/opt/1panel/www/sites/ffp.hikoutei.cn/index'
+  }
+
   options {
     timeout(time: 30, unit: 'MINUTES')
     disableConcurrentBuilds()          // 单核机器，别让两次构建互相抢
@@ -32,15 +41,40 @@ pipeline {
       }
     }
 
+    stage('console') {
+      // 管理后台 SPA。在 node 容器里构建，产物直接落到 OpenResty 的站点根目录。
+      // 两个卷都用宿主机绝对路径（见 HOST_WS 的说明）。
+      // npm 缓存持久化，避免每次 ci 都重新下载——这台机器只有 1 核。
+      steps {
+        sh '''
+          mkdir -p /opt/ffp-rag/npm-cache
+          docker run --rm \
+            -v "$HOST_WS/frontend":/src -w /src \
+            -v /opt/ffp-rag/npm-cache:/root/.npm \
+            -v "$SITE_ROOT":/out \
+            --memory 900m \
+            node:20-alpine sh -c "npm ci --prefer-offline --no-audit --fund=false && npm run build && rm -rf /out/console && cp -r dist /out/console"
+          docker exec 1Panel-openresty-Cdj5 nginx -t && docker exec 1Panel-openresty-Cdj5 nginx -s reload
+        '''
+      }
+    }
+
     stage('verify') {
       steps {
         sh '''
+          ok=0
           for i in $(seq 1 20); do
-            docker exec ffp-rag python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health')" \
-              && exit 0
+            if docker exec ffp-rag python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health')"; then
+              ok=1; break
+            fi
             sleep 3
           done
-          echo "服务未在 60s 内就绪"; docker logs --tail 50 ffp-rag; exit 1
+          if [ "$ok" != "1" ]; then
+            echo "服务未在 60s 内就绪"; docker logs --tail 50 ffp-rag; exit 1
+          fi
+          echo "--- 公网入口复验 ---"
+          curl -sf -m 15 -o /dev/null -w "  /health   %{http_code}\\n" https://ffp.hikoutei.cn/health
+          curl -sf -m 15 -o /dev/null -w "  /console/ %{http_code}\\n" https://ffp.hikoutei.cn/console/
         '''
       }
     }
