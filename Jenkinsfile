@@ -10,6 +10,11 @@ pipeline {
     // 这里翻译成宿主机上的真实路径。
     HOST_WS   = "${env.WORKSPACE.replace('/var/jenkins_home', '/opt/1panel/apps/jenkins/jenkins/data')}"
     SITE_ROOT = '/opt/1panel/www/sites/ffp.hikoutei.cn/index'
+    // 1Panel 只挂了 /usr/bin/docker，没挂 /usr/libexec/docker/cli-plugins，
+    // 而 compose 是 CLI 插件不是主二进制，所以容器里默认没有 `docker compose`。
+    // 插件已复制到 /var/jenkins_home/.docker/cli-plugins/（这是卷，容器重建不丢），
+    // 这里指过去。参见 docs/adr/0006-jenkins-docker-outside-of-docker.md。
+    DOCKER_CONFIG = '/var/jenkins_home/.docker'
   }
 
   options {
