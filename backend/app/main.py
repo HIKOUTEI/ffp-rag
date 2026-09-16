@@ -1,4 +1,4 @@
-"""FastAPI 入口：/chat（JSON）、/chat/stream（SSE）、/health。"""
+"""FastAPI 入口：/chat（JSON）、/chat/conversation/stream（SSE）、/health。"""
 import json
 import os
 
@@ -150,25 +150,6 @@ def popular_questions(n: int = 4):
     return PopularQuestionsResponse(
         questions=[PopularQuestion(**it) for it in items]
     )
-
-
-@app.post("/chat/stream")
-def chat_stream(req: ChatRequest, authorization: str = Header(None)):
-    auth.require_user_with_quota(authorization)
-    _check_ready()
-    retrieved = store.search(req.question, req.top_k)
-
-    def event_gen():
-        # 1) 先推送来源
-        sources = [_source_dict(r) for r in retrieved]
-        yield f"event: sources\ndata: {json.dumps(sources, ensure_ascii=False)}\n\n"
-        # 2) 逐段推送回答
-        for delta in rag.generate_stream(req.question, retrieved):
-            yield f"event: delta\ndata: {json.dumps({'text': delta}, ensure_ascii=False)}\n\n"
-        # 3) 结束
-        yield "event: done\ndata: {}\n\n"
-
-    return StreamingResponse(event_gen(), media_type="text/event-stream")
 
 
 # ---- 纠错记录 ----

@@ -50,20 +50,6 @@ def generate(query, retrieved):
     return resp.choices[0].message.content.strip()
 
 
-def generate_stream(query, retrieved):
-    """流式生成，逐段 yield token 文本。"""
-    stream = client.chat.completions.create(
-        model=config.CHAT_MODEL,
-        messages=build_messages(query, retrieved),
-        temperature=0.2,
-        stream=True,
-    )
-    for chunk in stream:
-        delta = chunk.choices[0].delta.content
-        if delta:
-            yield delta
-
-
 # ---- 多轮对话 ----
 
 REWRITE_SYSTEM = (

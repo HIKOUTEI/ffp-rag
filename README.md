@@ -14,7 +14,7 @@ ffp-rag/
 └── backend/                      # 正式后端
     ├── app/
     │   ├── config.py             # provider 配置（zhipu/openai/qwen）+ 路径 + ADMIN_TOKEN
-    │   ├── rag.py                # embed / generate / generate_stream
+    │   ├── rag.py                # embed / generate / generate_with_history_stream
     │   ├── store.py              # Chroma 封装：ingest(全量重建) / add_fragments(追加) / search
     │   ├── ingest_url.py         # URL 抓取 + AI 抽取切分打标（小红书不支持）
     │   ├── schemas.py            # Pydantic 请求/响应模型
@@ -55,7 +55,7 @@ ADMIN_TOKEN=一串随机密钥           # 保护 /admin/* 接口
 | 接口 | 说明 |
 |------|------|
 | `POST /chat` | 返回 `{answer, sources:[{domain,source,score}]}` |
-| `POST /chat/stream` | SSE 流式：先 `sources` 事件 → 逐段 `delta` → `done`（打字机效果） |
+| `POST /chat/conversation/stream` | SSE 流式：`rewritten` → `sources` → 逐段 `delta` → `done`（打字机效果） |
 | `GET /health` | 健康检查，返回 provider 与已加载语料数 |
 
 请求体：`{"question": "国航金卡有哪些权益？", "top_k": 4}`
