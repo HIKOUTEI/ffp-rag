@@ -1,5 +1,6 @@
 """FastAPI 入口：/chat（JSON）、/chat/stream（SSE）、/health。"""
 import json
+import os
 
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,10 +24,15 @@ app = FastAPI(title="常旅客 RAG 后端", version="0.1.0")
 # 若都不相关（答案会是「资料里没有」），来源应为空而非挂一堆无关低分项。
 SOURCE_MIN = 0.45
 
-# 开发期 CORS 全开，生产收紧
+# CORS 只对「浏览器发起的跨域请求」有意义，本项目两个前端都不产生这种请求：
+# - 管理后台：开发期 Vite 把 /admin /chat /health 代理到 8000（见 vite.config.ts），
+#   生产期与 API 同源（OpenResty 把 /console/ 与 / 挂在同一域）。两种情况都不跨域。
+# - 小程序：wx.request 不受同源策略约束，不发 Origin，CORS 对它无效。
+# 故默认不放行任何来源。确有需要时用 CORS_ORIGINS（逗号分隔）覆盖。
+ALLOW_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOW_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
