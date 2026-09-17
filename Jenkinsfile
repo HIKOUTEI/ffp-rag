@@ -11,6 +11,13 @@ pipeline {
                  description: '忽略变更检测，强制重新部署后端与管理后台')
   }
 
+  triggers {
+    // GitHub 推送后由 webhook 打到 https://jenkins.hikoutei.cn/github-webhook/，
+    // Jenkins 拉代码再跑 plan 阶段决定做不做事。不用轮询，省这台 1 核机器的力气。
+    // 注意：写在 Jenkinsfile 里的 triggers 要等【本文件被成功构建过一次】才注册生效。
+    githubPush()
+  }
+
   environment {
     // Jenkins 在容器里，但 docker 命令由【宿主机的 daemon】执行：
     // -v 的路径是宿主机视角。WORKSPACE 是容器视角（/var/jenkins_home/...），
