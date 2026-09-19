@@ -1,0 +1,6 @@
+# 开发期依赖，不进运行时镜像（Dockerfile 只装 requirements.txt）。
+# 安装：.venv/bin/python -m pip install -r requirements-dev.txt
+
+# AST 级静态检查：不 import、不需要 API key，毫秒级扫全库。
+# 专治「调用了未定义的名字」这类靠人眼和冒烟测试都看不出来的 bug。
+pyflakes>=3.4

@@ -20,7 +20,6 @@ import argparse
 import glob
 import json
 import os
-import sys
 
 from app.chunking import (MAX_LEN, _LONE_NUM, find_glued_numbering,
                           normalize_numbering, split_text)

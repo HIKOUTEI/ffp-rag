@@ -1,6 +1,7 @@
 """Chroma 持久化向量库封装。我们自己用 provider 的 embedding，故禁用 Chroma 自带 embedding。"""
 import glob
 import json
+import logging
 import os
 import threading
 import uuid
@@ -10,6 +11,8 @@ import chromadb
 from app import config
 from app.rag import embed
 from app.urlutil import canonical_url
+
+log = logging.getLogger(__name__)
 
 
 def get_client():
@@ -145,12 +148,14 @@ def add_fragments(fragments, with_aliases=True, async_aliases=True):
     _backup_fragments(doc_ids, doc_metas, doc_texts)
 
     # 2) 别名问法：默认后台异步生成（不阻塞入库，正文已可检索）
+    # 仍用 daemon 线程——进程关停时宁可丢别名也不拖住退出。丢了不再是黑洞：
+    # `scripts/check_aliases.py` 能扫出缺别名的正文并只给这批补生成。
     if with_aliases:
         payload = [(doc_ids[i], f) for i, f in enumerate(fragments)]
         if async_aliases:
-            threading.Thread(target=_build_aliases, args=(payload,), daemon=True).start()
+            threading.Thread(target=_build_aliases_safe, args=(payload,), daemon=True).start()
         else:
-            _build_aliases(payload)
+            _build_aliases_safe(payload)
 
     return len(fragments), col.count()
 
@@ -179,6 +184,8 @@ def find_ingested_url(url):
         "count": len(ids),
     }
 
+
+def _with_subject(f):
     """把主体拼到正文前，供别名生成时明确主体（避免 AI 抓错主体）。
     f 可为 fragment dict 或含 meta 的 dict。主体缺失则原样返回 text。"""
     text = f.get("text", "")
@@ -189,33 +196,62 @@ def find_ingested_url(url):
 
 
 def _build_aliases(payload):
-    """为每条知识生成别名问法并写入。payload: list[(doc_id, fragment_dict)]。"""
+    """为每条知识生成别名问法并写入。payload: list[(doc_id, fragment_dict)]。
+
+    【不再静默】每一处失败都落日志，且单条失败不影响其余条写入。
+    别名缺失是可自愈的：覆盖率直接由库里 alias 的 parent_id 反查得出，
+    不需要额外记账，事后跑 `python -m scripts.check_aliases --backfill` 即可补齐。
+    """
     from app import ingest_url  # 局部导入避免循环依赖
+
+    # 别名生成时带上主体，避免 AI 抓错主体（用顺带提及的品牌造问法）
+    texts = [_with_subject(f) for _id, f in payload]
+    alias_lists, failures = ingest_url.generate_aliases_batch(texts)
+    for i, exc in failures:
+        log.warning("别名生成失败：doc_id=%s source=%s：%s",
+                    payload[i][0], payload[i][1].get("source", "?"), exc)
+
+    a_ids, a_texts, a_metas = [], [], []
+    for (doc_id, f), aliases in zip(payload, alias_lists):
+        for j, q in enumerate(aliases):
+            a_ids.append(f"{doc_id}-alias-{j}")
+            a_texts.append(q)
+            a_metas.append({
+                "domain": f.get("domain", "other"),
+                "subject": f.get("subject", ""),
+                "subtopic": f.get("subtopic", ""),
+                "source": f.get("source", "?"),
+                "url": f.get("url", ""),
+                "date": f.get("date", ""),
+                "kind": "alias",
+                "parent_id": doc_id,
+                "parent_text": f["text"],
+            })
+
+    if not a_ids:
+        log.warning("本批 %d 条知识未产出任何别名，检索召回会受影响；"
+                    "用 `python -m scripts.check_aliases` 查覆盖率", len(payload))
+        return
+
     try:
-        # 别名生成时带上主体，避免 AI 抓错主体（用顺带提及的品牌造问法）
-        texts = [_with_subject(f) for _id, f in payload]
-        alias_lists = ingest_url.generate_aliases_batch(texts)
-        a_ids, a_texts, a_metas = [], [], []
-        for (doc_id, f), aliases in zip(payload, alias_lists):
-            for j, q in enumerate(aliases):
-                a_ids.append(f"{doc_id}-alias-{j}")
-                a_texts.append(q)
-                a_metas.append({
-                    "domain": f.get("domain", "other"),
-                    "subject": f.get("subject", ""),
-                    "subtopic": f.get("subtopic", ""),
-                    "source": f.get("source", "?"),
-                    "url": f.get("url", ""),
-                    "date": f.get("date", ""),
-                    "kind": "alias",
-                    "parent_id": doc_id,
-                    "parent_text": f["text"],
-                })
-        if a_ids:
-            col = get_client().get_or_create_collection(name=config.COLLECTION, embedding_function=None)
-            col.add(ids=a_ids, embeddings=embed(a_texts), documents=a_texts, metadatas=a_metas)
+        col = get_client().get_or_create_collection(name=config.COLLECTION, embedding_function=None)
+        col.add(ids=a_ids, embeddings=embed(a_texts), documents=a_texts, metadatas=a_metas)
     except Exception:
-        pass  # 别名生成失败不影响已入库的正文
+        # 正文早已入库且可检索，这里失败只丢别名，不该连累主链路
+        log.exception("别名写入向量库失败，%d 条别名丢失（正文不受影响）", len(a_ids))
+        return
+
+    covered = len({m["parent_id"] for m in a_metas})
+    log.info("别名写入完成：%d/%d 条知识拿到别名，共 %d 条；失败 %d 条",
+             covered, len(payload), len(a_ids), len(failures))
+
+
+def _build_aliases_safe(payload):
+    """后台线程入口：兜住任何未预期异常并记全栈，绝不无声退出。"""
+    try:
+        _build_aliases(payload)
+    except Exception:
+        log.exception("别名后台任务异常退出，%d 条知识未生成别名", len(payload))
 
 
 def search(query, top_k=None):
@@ -346,10 +382,16 @@ def update_doc(doc_id, new_text):
     col.update(ids=[doc_id], embeddings=[vec], documents=[new_text])
 
     # 2) 重建别名（旧别名删掉，按新文本重生成）
+    # 正文已经改完并可检索，别名失败只记日志、不让整个请求失败。
+    # 缺的别名事后用 `python -m scripts.check_aliases --backfill` 补。
     _delete_aliases_of(col, doc_id)
     meta = cur["meta"]
-    aliases = ingest_url.generate_aliases(
-        _with_subject({"text": new_text, "subject": meta.get("subject", "")}))
+    try:
+        aliases = ingest_url.generate_aliases(
+            _with_subject({"text": new_text, "subject": meta.get("subject", "")}))
+    except Exception:
+        log.exception("改写知识后别名重生成失败：doc_id=%s（正文已更新，别名暂缺）", doc_id)
+        aliases = []
     if aliases:
         a_ids, a_metas = [], []
         for j, q in enumerate(aliases):
@@ -365,8 +407,30 @@ def update_doc(doc_id, new_text):
                 "parent_id": doc_id,
                 "parent_text": new_text,
             })
-        col.add(ids=a_ids, embeddings=embed(aliases), documents=aliases, metadatas=a_metas)
+        try:
+            col.add(ids=a_ids, embeddings=embed(aliases), documents=aliases, metadatas=a_metas)
+        except Exception:
+            log.exception("改写知识后别名写入失败：doc_id=%s（正文已更新，别名暂缺）", doc_id)
+    else:
+        log.warning("改写知识后未产出别名：doc_id=%s", doc_id)
     return True, old
+
+
+# ---- 别名健康度 ----
+
+def docs_missing_aliases():
+    """扫出「没有任何别名指向」的正文，返回 list[dict]（结构同 all_docs()）。
+
+    覆盖率不另建账本，直接由库里 alias 的 parent_id 反查——补齐后自动从这里消失，
+    天然自愈，也不会出现账本与实际不一致。
+    """
+    col = get_collection()
+    try:
+        al = col.get(where={"kind": "alias"}, include=["metadatas"])
+    except Exception:
+        al = {"metadatas": []}
+    parents = {m.get("parent_id") for m in (al.get("metadatas") or []) if m.get("parent_id")}
+    return [d for d in all_docs() if d["id"] not in parents]
 
 
 def delete_doc(doc_id):

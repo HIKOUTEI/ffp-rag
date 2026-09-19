@@ -6,13 +6,12 @@
 """
 import json
 import threading
-import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from app import config, store
-from app.rag import client, embed
+from app.rag import client
 
 # ---- 异步任务表（内存）----
 _tasks = {}

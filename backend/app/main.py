@@ -11,7 +11,7 @@ from app import health as health_mod
 from app.rail import api as rail_api
 from app.schemas import (
     ChatRequest, ChatResponse, Source,
-    ParseUrlRequest, ParseUrlResponse, Fragment,
+    ParseUrlRequest, Fragment,
     IngestParsedRequest, IngestParsedResponse, UpdateDocRequest,
     ConversationRequest, ConversationResponse,
     PopularQuestion, PopularQuestionsResponse,

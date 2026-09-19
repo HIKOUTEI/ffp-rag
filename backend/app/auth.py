@@ -13,7 +13,7 @@ import threading
 from datetime import datetime, date
 
 import requests
-from fastapi import HTTPException, Header
+from fastapi import HTTPException
 
 from app import config
 

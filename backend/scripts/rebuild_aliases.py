@@ -1,28 +1,14 @@
 """重建所有别名向量（受控并发版）：删除现有别名 → 用最新 ALIAS_SYSTEM 重新生成。
-正文完全不动。3 路并发 + 429 退避重试 + 单请求 timeout，兼顾速度与稳定。
+正文完全不动。2 路并发 + 429 退避重试 + 单请求 timeout，兼顾速度与稳定。
 用法：python -m scripts.rebuild_aliases
+
+只想补「缺别名」的正文用 `python -m scripts.check_aliases --backfill`，便宜得多。
 """
-import time
 from concurrent.futures import ThreadPoolExecutor
 
-from app import store, ingest_url
+from app import ingest_url, store
 
 WORKERS = 2          # 并发路数（温和，避免限流）
-MAX_RETRY = 5
-
-
-def gen_with_backoff(text):
-    """生成一条知识的别名，遇限流(429)指数退避重试。generate_aliases 已带 timeout。"""
-    for attempt in range(MAX_RETRY):
-        try:
-            return ingest_url.generate_aliases(text)
-        except Exception as e:
-            if "429" in str(e) or "rate" in str(e).lower() or "速率" in str(e):
-                wait = 5 * (attempt + 1)
-                time.sleep(wait)
-                continue
-            return []
-    return []
 
 
 def main():
@@ -40,23 +26,29 @@ def main():
     print(f"为 {total} 条正文重新生成别名（{WORKERS} 路并发）…", flush=True)
 
     # 并发生成，保持与 docs 对齐（带主体，避免 AI 抓错主体）
-    alias_lists = [[] for _ in docs]
+    results = [([], None)] * total
     done = 0
     with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-        futs = {ex.submit(gen_with_backoff, store._with_subject(d)): i for i, d in enumerate(docs)}
+        futs = {ex.submit(ingest_url.generate_aliases_with_retry, store._with_subject(d)): i
+                for i, d in enumerate(docs)}
         for fut in futs:
             i = futs[fut]
             try:
-                alias_lists[i] = fut.result()
-            except Exception:
-                alias_lists[i] = []
+                results[i] = fut.result()
+            except Exception as e:
+                results[i] = ([], e)
             done += 1
             if done % 20 == 0:
                 print(f"  进度 {done}/{total}", flush=True)
 
+    # 失败的逐条报出来，不再静默
+    for d, (_, err) in zip(docs, results):
+        if err:
+            print(f"  ✗ {d['id']} [{d.get('source', '?')}]：{err}")
+
     # 组装
     a_ids, a_texts, a_metas = [], [], []
-    for d, aliases in zip(docs, alias_lists):
+    for d, (aliases, _) in zip(docs, results):
         for j, q in enumerate(aliases):
             a_ids.append(f"{d['id']}-alias-{j}")
             a_texts.append(q)
@@ -78,7 +70,8 @@ def main():
         for i in range(0, len(a_ids), B):
             col.add(ids=a_ids[i:i+B], embeddings=store.embed(a_texts[i:i+B]),
                     documents=a_texts[i:i+B], metadatas=a_metas[i:i+B])
-    print(f"完成：库总计 {col.count()} 条。", flush=True)
+    still = len(store.docs_missing_aliases())
+    print(f"完成：库总计 {col.count()} 条，仍缺别名的正文 {still} 条。", flush=True)
 
 
 if __name__ == "__main__":

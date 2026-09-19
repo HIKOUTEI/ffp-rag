@@ -1,7 +1,9 @@
 """URL 摄入管线：抓取网页 + AI 抽取切分打标。小红书不支持（反爬）。"""
 import json
+import logging
 import re
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
@@ -12,6 +14,8 @@ from app import config
 from app.chunking import normalize_numbering, split_text
 from app.rag import client
 from app.urlutil import canonical_url
+
+log = logging.getLogger(__name__)
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/120.0 Safari/537.36")
@@ -186,40 +190,74 @@ ALIAS_SYSTEM = (
 
 
 def generate_aliases(text: str):
-    """给一条知识生成多个用户问法（别名），返回 list[str]。失败返回 []。"""
-    try:
-        resp = client.chat.completions.create(
-            model=config.CHAT_MODEL,
-            messages=[
-                {"role": "system", "content": ALIAS_SYSTEM},
-                {"role": "user", "content": f"知识片段：\n{text}"},
-            ],
-            temperature=0.5,
-            response_format={"type": "json_object"},
-            timeout=30,
-        )
-        raw = resp.choices[0].message.content.strip()
-        data = json.loads(raw)
-        qs = data.get("queries", [])
-        return [q.strip() for q in qs if isinstance(q, str) and q.strip()][:5]
-    except Exception:
-        return []
+    """给一条知识生成多个用户问法（别名），返回 list[str]。
+
+    【失败会抛异常，调用方必须自己处理】以前这里是 `except: return []`，
+    后果有两个：入库缺别名无人知晓；`scripts/rebuild_aliases.py` 靠捕获异常做的
+    429 退避重试因为永远收不到异常而从未生效。故意让它往外抛。
+    """
+    resp = client.chat.completions.create(
+        model=config.CHAT_MODEL,
+        messages=[
+            {"role": "system", "content": ALIAS_SYSTEM},
+            {"role": "user", "content": f"知识片段：\n{text}"},
+        ],
+        temperature=0.5,
+        response_format={"type": "json_object"},
+        timeout=30,
+    )
+    raw = resp.choices[0].message.content.strip()
+    data = json.loads(raw)
+    qs = data.get("queries", [])
+    return [q.strip() for q in qs if isinstance(q, str) and q.strip()][:5]
 
 
 def generate_aliases_batch(texts):
-    """并行给多条知识生成别名，返回 list[list[str]]，与输入等长。"""
+    """并行给多条知识生成别名。单条失败不影响其余条。
+
+    返回 `(results, failures)`：
+      - `results`  list[list[str]]，与输入等长，失败项为 `[]`
+      - `failures` list[(下标, 异常)]，供调用方落日志或重试
+
+    注意区分：`results[i] == []` 既可能是失败，也可能是 AI 认为无别名可生成，
+    要判断失败请看 `failures`。
+    """
     if not texts:
-        return []
+        return [], []
     results = [[] for _ in texts]
+    failures = []
     with ThreadPoolExecutor(max_workers=min(6, len(texts))) as ex:
         futs = {ex.submit(generate_aliases, t): i for i, t in enumerate(texts)}
         for fut in futs:
             i = futs[fut]
             try:
                 results[i] = fut.result()
-            except Exception:
-                results[i] = []
-    return results
+            except Exception as e:
+                failures.append((i, e))
+    return results, failures
+
+
+ALIAS_MAX_RETRY = 5
+
+
+def generate_aliases_with_retry(text, max_retry=ALIAS_MAX_RETRY):
+    """生成别名，遇限流(429)指数退避重试。返回 `(aliases, error)`。
+
+    给批量补齐脚本用（`check_aliases` / `rebuild_aliases`），它们跑几百条容易撞限流。
+    非限流错误直接返回，不做无谓重试。error 为 None 表示成功。
+    """
+    last = None
+    for attempt in range(max_retry):
+        try:
+            return generate_aliases(text), None
+        except Exception as e:
+            last = e
+            s = str(e).lower()
+            if "429" in s or "rate" in s or "速率" in str(e):
+                time.sleep(5 * (attempt + 1))
+                continue
+            break
+    return [], last
 
 
 # ---- 异步解析任务（供前端显示进度）----
