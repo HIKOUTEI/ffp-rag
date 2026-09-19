@@ -16,6 +16,7 @@ backend/chroma_db/
 backend/*.db
 backend/data/
 backend/ingested.jsonl
+backend/rail_snapshots/
 *.sqlite3
 
 # ---- 前端 / 小程序 ----
