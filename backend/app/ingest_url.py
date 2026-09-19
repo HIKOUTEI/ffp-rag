@@ -9,6 +9,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from app import config
+from app.chunking import normalize_numbering, split_text
 from app.rag import client
 from app.urlutil import canonical_url
 
@@ -125,27 +126,6 @@ def _parse_chunk(title: str, text: str):
     return [f for f in out if f["text"]]
 
 
-def _split_text(text: str, max_len: int = 1000):
-    """按段落把长文切成不超过 max_len 的块（尽量在换行边界切，保持语义完整）。
-    公众号正文常只有单换行，故先试双换行、切不动再退到单换行。"""
-    if len(text) <= max_len:
-        return [text]
-    # 优先双换行；若整篇没有双换行（公众号常见），退回单换行
-    paras = re.split(r"\n{2,}", text)
-    if len(paras) == 1:
-        paras = text.split("\n")
-    chunks, cur = [], ""
-    for p in paras:
-        if cur and len(cur) + len(p) > max_len:
-            chunks.append(cur)
-            cur = p
-        else:
-            cur = f"{cur}\n{p}" if cur else p
-    if cur:
-        chunks.append(cur)
-    return chunks
-
-
 def parse(title: str, text: str, on_progress=None):
     """把正文解析成结构化片段。长文分块 + 并行解析。
     on_progress(msg) 可选，用于上报进度。"""
@@ -156,7 +136,9 @@ def parse(title: str, text: str, on_progress=None):
             except Exception:
                 pass
 
-    chunks = _split_text(text)
+    # 切分前先规整序号：`1.` 与 `50N礼遇` 分处两行时，拼起来会被 LLM 读成小数 1.50N。
+    # 只处理这种无歧义形态；原文本就粘成一行的（真实万豪文即是）不动，见 chunking.py。
+    chunks = split_text(normalize_numbering(text))
     if len(chunks) == 1:
         _p("AI 解析中…")
         return _parse_chunk(title, chunks[0])
