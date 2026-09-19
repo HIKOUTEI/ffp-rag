@@ -1,0 +1,45 @@
+<!-- 打卡地图。
+     <map> 是原生组件，层级永远在普通 view 之上，所以浮在它上面的东西
+     必须写成 <map> 的子节点、且必须是 <cover-view>（普通 view 会被地图盖住）。
+     cover-view 只支持很有限的 CSS：不能用 box-shadow、渐变、backdrop-filter，
+     里面也只能再放 cover-view / cover-image / button，放 <text> 会渲染不出来。 -->
+
+<!-- 加载中 -->
+<view wx:if="{{loading}}" class="map-state">正在把你的行程画到地图上…</view>
+
+<!-- 加载失败 -->
+<view wx:elif="{{error}}" class="map-state">
+  <view>{{error}}</view>
+  <view class="map-state-action">
+    <t-button theme="light" size="medium" bindtap="load">重试</t-button>
+  </view>
+</view>
+
+<!-- 空状态：一条能画在地图上的记录都没有 -->
+<view wx:elif="{{isEmpty}}" class="rail-wrap map-empty">
+  <t-empty class="rail-empty" icon="map-route-planning" description="还没有可以画在地图上的行程" />
+  <view class="map-empty-hint">手填的记录没有停站信息，画不出线路</view>
+  <view class="map-empty-action">
+    <t-button theme="primary" size="large" block bindtap="onGoEntry">去记一趟车</t-button>
+  </view>
+</view>
+
+<!-- 地图本体 -->
+<map wx:else id="railmap" class="map-full"
+     longitude="{{center.lon}}" latitude="{{center.lat}}" scale="{{scale}}"
+     polyline="{{polyline}}" markers="{{markers}}"
+     show-location="{{false}}" enable-rotate="{{false}}">
+
+  <!-- 顶部信息条 -->
+  <cover-view class="map-bar">
+    <cover-view class="map-bar-main">
+      <cover-view class="map-bar-title">{{legCount}} 条线路 · {{stationCount}} 座车站</cover-view>
+      <!-- 只有点没有线的情况（全是手填记录），不解释用户会以为坏了 -->
+      <cover-view wx:if="{{lineless}}" class="map-bar-sub">手填的记录没有停站信息，画不出线路</cover-view>
+    </cover-view>
+    <cover-view class="map-bar-close" bindtap="onClose">✕</cover-view>
+  </cover-view>
+
+  <!-- 右上角：车站太密时说明只画了到过 ≥2 次的站 -->
+  <cover-view wx:if="{{thinned}}" class="map-tip">已隐藏只到过一次的车站</cover-view>
+</map>

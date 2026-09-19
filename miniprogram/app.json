@@ -1,8 +1,11 @@
 {
   "pages": [
     "pages/chat/chat",
+    "pages/rail/rail",
     "pages/profile/profile",
-    "pages/about/about"
+    "pages/about/about",
+    "pages/rail-entry/rail-entry",
+    "pages/rail-map/rail-map"
   ],
   "usingComponents": {
     "t-chat-content": "tdesign-miniprogram/chat-content/chat-content",
@@ -27,6 +30,7 @@
     "borderStyle": "white",
     "list": [
       { "pagePath": "pages/chat/chat", "text": "问答" },
+      { "pagePath": "pages/rail/rail", "text": "行程" },
       { "pagePath": "pages/profile/profile", "text": "我的" },
       { "pagePath": "pages/about/about", "text": "关于" }
     ]

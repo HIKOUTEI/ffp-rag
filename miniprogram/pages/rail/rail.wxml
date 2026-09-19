@@ -1,0 +1,144 @@
+<view class="rail-wrap">
+
+  <!-- ===== 1. 统计卡片：一条记录都没有时整张不渲染 ===== -->
+  <view wx:if="{{stats && stats.journey_count > 0}}" class="rail-card stat-card">
+    <view class="stat-head">
+      <view class="stat-main">
+        <view class="stat-km">
+          <text class="stat-km-num">{{totalKm}}</text>
+          <text class="stat-km-unit">km</text>
+        </view>
+        <view class="rail-stat-label">累计乘车里程</view>
+      </view>
+      <!-- 打卡地图入口 -->
+      <view class="stat-map" bindtap="onOpenMap">
+        <t-icon name="map-route-planning" size="34rpx" color="#0a84ff" />
+        <text class="stat-map-text">地图</text>
+      </view>
+    </view>
+
+    <view class="stat-grid">
+      <view class="stat-cell">
+        <view class="rail-stat-num">{{stats.journey_count}}</view>
+        <view class="rail-stat-label">次乘车</view>
+      </view>
+      <view class="stat-cell">
+        <!-- 口径是「去重的途经车站」，不是上下车站数，文案照此写 -->
+        <view class="rail-stat-num">{{stats.station_count}}</view>
+        <view class="rail-stat-label">途经车站</view>
+      </view>
+      <view class="stat-cell">
+        <view class="rail-stat-num">{{stats.city_count}}</view>
+        <view class="rail-stat-label">座城市</view>
+      </view>
+      <view class="stat-cell">
+        <view class="rail-stat-num">{{stats.province_count}}</view>
+        <view class="rail-stat-label">个省份</view>
+      </view>
+    </view>
+
+    <!-- 车次种别分布，最多 4 种，超出直接截断 -->
+    <view wx:if="{{classTags.length}}" class="stat-tags">
+      <t-tag wx:for="{{classTags}}" wx:key="text" theme="{{item.theme}}" variant="light" size="small">{{item.text}}</t-tag>
+    </view>
+  </view>
+
+  <!-- ===== 2. 乘车记录列表 ===== -->
+  <view wx:if="{{journeys.length}}" class="rail-section-title">乘车记录</view>
+
+  <t-swipe-cell wx:for="{{journeys}}" wx:key="id" class="journey-item">
+    <view class="rail-card journey-card {{item.stale ? 'rail-stale' : ''}}"
+          bindtap="onEdit" data-id="{{item.id}}">
+      <view class="card-head">
+        <view class="card-tags">
+          <t-tag theme="primary" variant="light" size="medium">{{item.trainNumber}}</t-tag>
+          <!-- 车次停运/改点：记录仍有效，只是时刻与里程查不回来 -->
+          <t-tag wx:if="{{item.stale}}" theme="default" variant="light" size="small">已改点</t-tag>
+          <!-- 手填的历史补录：没有时刻与里程，破折号是正确表现 -->
+          <t-tag wx:if="{{item.manual}}" variant="outline" size="small">手填</t-tag>
+        </view>
+        <text class="card-date">{{item.dateText}}</text>
+      </view>
+
+      <view class="rail-leg">
+        <view class="rail-leg-end">
+          <view class="rail-leg-station">{{item.fromStation}}</view>
+          <view class="rail-leg-time">{{item.depText}}</view>
+        </view>
+        <view class="rail-leg-mid">
+          <view class="rail-leg-km">{{item.kmText}}</view>
+          <view class="rail-leg-line"></view>
+        </view>
+        <view class="rail-leg-end is-right">
+          <view class="rail-leg-station">{{item.toStation}}</view>
+          <view class="rail-leg-time">
+            {{item.arrText}}<text wx:if="{{item.dayTag}}" class="card-day-tag">{{item.dayTag}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{item.note}}" class="card-note">{{item.note}}</view>
+    </view>
+
+    <view slot="right" class="rail-swipe-del" bindtap="onDelete" data-id="{{item.id}}">删除</view>
+  </t-swipe-cell>
+
+  <view wx:if="{{hasMore}}" class="more-wrap">
+    <t-button theme="light" size="medium" loading="{{loadingMore}}" bindtap="onLoadMore">加载更多</t-button>
+  </view>
+
+  <!-- ===== 3. 空状态 ===== -->
+  <view wx:if="{{!loading && journeys.length === 0}}" class="rail-empty">
+    <t-empty icon="map-route-planning" description="还没有乘车记录">
+      <t-button slot="action" theme="primary" bindtap="onAdd">记第一趟车</t-button>
+    </t-empty>
+  </view>
+
+  <!-- ===== 5. 数据与隐私 =====
+       「注销账号」是个保法要求的删除权入口，全局仅此一处，
+       所以即便一条记录都没有也照常显示；导出与清空则无记录时隐藏（点了也是空操作）。 -->
+  <view class="rail-section-title privacy-title">数据与隐私</view>
+  <t-cell-group theme="card">
+    <t-cell wx:if="{{journeys.length}}" title="导出我的数据" leftIcon="file-export" arrow hover bindtap="onExport" />
+    <t-cell wx:if="{{journeys.length}}" title="清空全部记录" leftIcon="delete" arrow hover bindtap="onClear" />
+    <t-cell title="注销账号" leftIcon="user-clear" arrow hover bindtap="onDeleteAccount" />
+  </t-cell-group>
+  <view class="privacy-tip">乘车记录保存在服务器，仅你本人可见。</view>
+</view>
+
+<!-- ===== 4. 录入入口 ===== -->
+<view class="rail-fab" bindtap="onAdd">
+  <t-icon name="add" color="#fff" size="52rpx" />
+</view>
+
+<!-- 编辑面板：只能改乘车日期与备注 -->
+<t-popup visible="{{editVisible}}" placement="bottom" bind:visible-change="onEditClose">
+  <view class="form">
+    <view class="form-title">编辑乘车记录</view>
+    <view class="form-sub">{{editTitle}}</view>
+
+    <t-cell title="乘车日期" note="{{editDateText}}" arrow hover bindtap="openDatePicker" />
+    <t-textarea label="备注" placeholder="可选" value="{{editNote}}" maxlength="{{200}}"
+                autosize="{{true}}" bind:change="onNoteInput" />
+
+    <view class="form-actions">
+      <t-button theme="light" size="large" t-class="btn-half" bindtap="onEditCancel">取消</t-button>
+      <t-button theme="primary" size="large" t-class="btn-half" bindtap="onEditSave">保存</t-button>
+    </view>
+    <view class="form-hint">车次与站点不可修改，如需更正请删除后重录。</view>
+  </view>
+</t-popup>
+
+<!-- 乘车日期选择器。日期只是记录元数据，不参与任何查询。 -->
+<t-date-time-picker visible="{{datePickerVisible}}" mode="date" format="YYYY-MM-DD"
+                    title="乘车日期" value="{{editDate}}"
+                    bind:confirm="onDateConfirm" bind:cancel="onDateCancel" />
+
+<!-- 注销账号第二道确认：必须手打「注销」二字 -->
+<t-dialog visible="{{logoutVisible}}" title="确认注销" confirmBtn="确认注销" cancelBtn="取消"
+          bind:confirm="onLogoutConfirm" bind:cancel="onLogoutCancel">
+  <view slot="content" class="logout-body">
+    <view class="logout-tip">请输入「注销」两个字以确认。此操作不可恢复。</view>
+    <t-input placeholder="注销" value="{{logoutInput}}" bind:change="onLogoutInput" />
+  </view>
+</t-dialog>

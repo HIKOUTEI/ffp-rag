@@ -1,0 +1,164 @@
+@import "/styles/rail.wxss";
+
+/* 「行程」首页自有样式。共用骨架（.rail-card / .rail-leg / .rail-fab …）在 styles/rail.wxss，
+   这里只补本页独有的排版。 */
+
+/* ===== 统计卡片 ===== */
+.stat-card { animation: fadeUp .5s var(--ease-spring) both; }
+
+.stat-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.stat-main { min-width: 0; }
+
+/* 主数字与单位分开排：单位跟在大号数字后面用小字，避免 " km" 挤进 48rpx 里 */
+.stat-km {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+}
+.stat-km-num {
+  font-size: 72rpx;
+  font-weight: 700;
+  color: var(--brand);
+  line-height: 1.1;
+}
+.stat-km-unit {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--text-weak);
+}
+
+/* 右上角地图入口 */
+.stat-map {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 10rpx 20rpx;
+  border-radius: 999rpx;
+  background: var(--brand-light);
+  flex: none;
+}
+.stat-map:active { opacity: .7; }
+.stat-map-text {
+  font-size: 26rpx;
+  color: var(--brand);
+}
+
+/* 四个小格 */
+.stat-grid {
+  display: flex;
+  margin-top: 28rpx;
+  padding-top: 24rpx;
+  border-top: 2rpx solid var(--hairline);
+}
+.stat-cell {
+  flex: 1;
+  text-align: center;
+  min-width: 0;
+}
+/* 小格里的数字比主数字小一档，别抢主数字的视觉重心 */
+.stat-cell .rail-stat-num { font-size: 40rpx; }
+
+.stat-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 24rpx;
+}
+
+/* ===== 记录列表 ===== */
+/* 外边距挂在 swipe-cell 上，卡片自身清零——否则侧滑出来的删除按钮会比卡片高一截。
+   swipe-cell 组件根节点自带 overflow:hidden（用来藏住未滑出的删除按钮），
+   所以这里补一个同样的圆角，让卡片与删除按钮共用一副圆角边框。 */
+.journey-item {
+  display: block;
+  margin-bottom: 24rpx;
+  border-radius: var(--radius-lg);
+}
+.journey-card { margin-bottom: 0; }
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+.card-tags {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  min-width: 0;
+}
+.card-date {
+  font-size: 26rpx;
+  color: var(--text-weak);
+  flex: none;
+  margin-left: 16rpx;
+}
+/* 跨日到达的「+1天」角标 */
+.card-day-tag {
+  font-size: 22rpx;
+  color: var(--text-weak);
+  margin-left: 6rpx;
+}
+.card-note {
+  margin-top: 20rpx;
+  padding-top: 16rpx;
+  border-top: 2rpx solid var(--hairline);
+  font-size: 24rpx;
+  color: var(--text-weak);
+}
+
+.more-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 8rpx 0 24rpx;
+}
+
+/* ===== 数据与隐私 ===== */
+.privacy-title { margin-top: 48rpx; }
+.privacy-tip {
+  text-align: center;
+  color: #b3bccb;
+  font-size: 24rpx;
+  margin-top: 20rpx;
+}
+
+/* ===== 编辑面板（与「我的」页的录入面板同款）===== */
+.form {
+  padding: 32rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-radius: 24rpx 24rpx 0 0;
+}
+.form-title { font-size: 32rpx; font-weight: 700; text-align: center; }
+.form-sub {
+  font-size: 26rpx;
+  color: var(--text-weak);
+  text-align: center;
+  margin: 10rpx 0 24rpx;
+}
+.form-actions { display: flex; gap: 24rpx; margin-top: 40rpx; }
+.btn-half { flex: 1; }
+.form-hint {
+  text-align: center;
+  font-size: 22rpx;
+  color: var(--text-weak);
+  margin-top: 20rpx;
+}
+
+/* ===== 注销确认对话框 ===== */
+.logout-body { padding: 0 32rpx 8rpx; }
+.logout-tip {
+  font-size: 26rpx;
+  color: var(--text-weak);
+  text-align: center;
+  margin-bottom: 20rpx;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}

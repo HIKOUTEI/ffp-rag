@@ -1,0 +1,152 @@
+<!-- 录入乘车记录：搜车次 → 展开停站 → 点上/下车站 → 填日期。三步同页切换。 -->
+
+<!-- ==================== 第 1 步：搜车次 ==================== -->
+<view wx:if="{{step === 'search'}}" class="rail-wrap">
+  <t-search value="{{keyword}}" placeholder="输入车次号，如 G1、K551" shape="round"
+            bind:change="onKeywordChange" bind:submit="onKeywordSubmit" />
+
+  <!-- 搜索中。已有结果时不换成 loading，避免每敲一个字整块闪一下 -->
+  <view wx:if="{{searching && !results.length}}" class="entry-loading">
+    <t-loading theme="circular" size="40rpx" text="搜索中" layout="vertical" />
+  </view>
+
+  <!-- 结果列表。车次号原样展示：换号车次就是 K551/K554 这个样子，不裁不纠正 -->
+  <view wx:elif="{{results.length}}" class="rail-card entry-result-card">
+    <view wx:for="{{results}}" wx:key="number" class="entry-result"
+          hover-class="entry-result--hover" bindtap="onPickTrain" data-number="{{item.number}}">
+      <view class="entry-result-head">
+        <text class="entry-result-no">{{item.number}}</text>
+        <t-tag theme="{{item.theme}}" variant="light" size="small">{{item.class}}</t-tag>
+      </view>
+      <view class="entry-result-sub">{{item.sub}}</view>
+    </view>
+  </view>
+
+  <!-- 搜过但没结果 -->
+  <view wx:elif="{{searched}}" class="entry-none">
+    <t-empty icon="search-error" description="没找到这个车次" />
+    <view class="entry-none-tip">可以试试去掉字母只输数字，或者用手填模式记录</view>
+    <t-button theme="light" size="medium" bindtap="goManual">手填</t-button>
+  </view>
+
+  <!-- 初始空态 -->
+  <view wx:else class="entry-intro">
+    <view class="entry-intro-emoji">🚄</view>
+    <view class="entry-intro-title">输个车次号就行</view>
+    <view class="entry-intro-sub">系统会把全程停站摊开，你点上车站和下车站即可</view>
+    <view class="entry-intro-link" bindtap="goManual">找不到车次？用手填模式记录</view>
+  </view>
+</view>
+
+<!-- ==================== 第 2 步：展开停站，点选区段 ==================== -->
+<view wx:if="{{step === 'stops'}}" class="rail-wrap entry-stops-wrap">
+  <!-- 车次抬头 -->
+  <view class="entry-train">
+    <view class="entry-train-back" bindtap="backToSearch">
+      <t-icon name="chevron-left" size="40rpx" color="#8e8e93" />
+    </view>
+    <view class="entry-train-main">
+      <view class="entry-train-head">
+        <text class="entry-train-no">{{train.number}}</text>
+        <t-tag theme="{{train.theme}}" variant="light" size="small">{{train.class}}</t-tag>
+      </view>
+      <view class="entry-train-sub">
+        {{train.origin}} → {{train.terminal}} · {{train.stop_count}} 站 · 全程 {{train.totalKmText}}
+      </view>
+    </view>
+  </view>
+
+  <!-- 提示条：吸顶，始终带「重选」。区段选好后点它可以重新叫出确认面板。 -->
+  <view class="entry-hint" bindtap="onHintTap">
+    <text class="entry-hint-text">{{hintText}}</text>
+    <view class="entry-hint-reset {{hasPick ? '' : 'is-off'}}" catchtap="onReset">重选</view>
+  </view>
+
+  <!-- 竖向时刻表。始发站无到达、终到站无发车，显示「—」是对的，不是缺数据。 -->
+  <view class="entry-stop-list">
+    <view wx:for="{{stops}}" wx:key="seq" class="entry-stop is-{{item.mark}}"
+          bindtap="onTapStop" data-i="{{index}}">
+      <!-- 左侧路线：上半线 + 圆点 + 下半线 -->
+      <view class="entry-rail">
+        <view class="entry-rail-line {{item.first ? 'is-hidden' : ''}}" />
+        <view class="entry-rail-dot is-{{item.edge}}" />
+        <view class="entry-rail-line {{item.last ? 'is-hidden' : ''}}" />
+      </view>
+
+      <text class="entry-stop-no">{{item.no}}</text>
+      <text class="entry-stop-name">{{item.station}}</text>
+
+      <view class="entry-stop-times">
+        <text class="entry-stop-time">{{item.arrival}}</text>
+        <text class="entry-stop-time">{{item.departure}}</text>
+        <text wx:if="{{item.day}}" class="entry-stop-day">{{item.day}}</text>
+      </view>
+
+      <text class="entry-stop-km">{{item.km}}</text>
+    </view>
+  </view>
+</view>
+
+<!-- ==================== 第 4 步：手填兜底 ==================== -->
+<!-- 不编造时刻、不编造里程，所以这里没有时刻输入框，也不承诺自动算里程。 -->
+<view wx:if="{{step === 'manual'}}" class="rail-wrap">
+  <view class="entry-train">
+    <view class="entry-train-back" bindtap="backToSearch">
+      <t-icon name="chevron-left" size="40rpx" color="#8e8e93" />
+    </view>
+    <view class="entry-train-main">
+      <view class="entry-train-head"><text class="entry-train-no">手填记录</text></view>
+      <view class="entry-train-sub">适合补录老行程。手填记录不带时刻与里程。</view>
+    </view>
+  </view>
+
+  <view class="rail-card">
+    <t-input label="车次号" placeholder="如 K79" value="{{manual.trainNumber}}"
+             data-field="trainNumber" bind:change="onManualInput" />
+    <t-cell title="乘车日期" arrow hover note="{{manual.rideDate}}" bindtap="openManualDatePicker" />
+    <t-input label="上车站" placeholder="站名，如 北京西" value="{{manual.fromStation}}"
+             data-field="fromStation" bind:change="onManualInput" />
+    <t-input label="下车站" placeholder="站名，如 广州" value="{{manual.toStation}}"
+             data-field="toStation" bind:change="onManualInput" />
+    <t-textarea placeholder="备注（可选，比如同行的人、座位号）" maxlength="{{200}}" indicator
+                autosize="{{true}}" value="{{manual.note}}"
+                data-field="note" bind:change="onManualInput" />
+  </view>
+
+  <t-button theme="primary" size="large" block bindtap="onSaveManual"
+            disabled="{{!canSaveManual || saving}}" loading="{{saving}}">保存</t-button>
+</view>
+
+<!-- ==================== 第 3 步：确认面板 ==================== -->
+<t-popup visible="{{confirmVisible}}" placement="bottom" bind:visible-change="onConfirmClose">
+  <view class="entry-confirm">
+    <view class="entry-confirm-title">{{train.number}}</view>
+    <view class="entry-confirm-sub">{{hintText}}</view>
+
+    <!-- ⚠️ 乘车日期只是这条记录的元数据，不参与查询，也不做开行校验 -->
+    <t-cell title="乘车日期" arrow hover note="{{rideDate}}" bindtap="openDatePicker" />
+    <t-textarea placeholder="备注（可选，比如同行的人、座位号）" maxlength="{{200}}" indicator
+                autosize="{{true}}" value="{{note}}" bind:change="onNoteChange" />
+
+    <view class="entry-confirm-actions">
+      <t-button theme="light" size="large" t-class="entry-btn-half" bindtap="onConfirmCancel">取消</t-button>
+      <t-button theme="primary" size="large" t-class="entry-btn-half" bindtap="onSave"
+                disabled="{{saving}}" loading="{{saving}}">保存</t-button>
+    </view>
+  </view>
+</t-popup>
+
+<!-- 日期选择器。start 放到 1950 年：TDesign 默认只让选近 10 年，补录老行程会被挡住。
+     不设 end（默认 +10 年），未来的日期也不拦——开不开行系统本来就无从判断。 -->
+<t-date-time-picker visible="{{datePickerVisible}}" mode="date" format="YYYY-MM-DD"
+                    title="乘车日期" value="{{rideDate}}" start="{{dateStart}}"
+                    bind:confirm="onDateConfirm" bind:cancel="onDateCancel" />
+
+<t-date-time-picker visible="{{manualDatePickerVisible}}" mode="date" format="YYYY-MM-DD"
+                    title="乘车日期" value="{{manual.rideDate}}" start="{{dateStart}}"
+                    bind:confirm="onManualDateConfirm" bind:cancel="onManualDateCancel" />
+
+<!-- 拉时刻表时的遮罩：上百站的车次要拉一会儿，不给反馈会像卡死 -->
+<view wx:if="{{loadingStops}}" class="entry-mask">
+  <t-loading theme="circular" size="48rpx" text="正在展开停站" layout="vertical" />
+</view>

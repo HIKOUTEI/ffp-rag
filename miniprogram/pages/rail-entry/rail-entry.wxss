@@ -1,0 +1,310 @@
+@import "/styles/rail.wxss";
+
+/* 录入页专属样式。共用的卡片/统计/空状态在 /styles/rail.wxss 里，这里只补本页独有的。 */
+
+/* ===== 第 1 步：搜车次 ===== */
+
+.entry-loading {
+  padding: 120rpx 0;
+  display: flex;
+  justify-content: center;
+}
+
+.entry-result-card {
+  margin-top: 24rpx;
+  padding: 8rpx 28rpx;
+}
+
+.entry-result {
+  padding: 24rpx 0;
+  border-bottom: 2rpx solid var(--hairline);
+}
+.entry-result:last-child { border-bottom: none; }
+.entry-result--hover { background: var(--surface-2); }
+
+.entry-result-head {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+/* 车次号原样展示：换号车次就是 K551/K554 这么长，不裁不缩 */
+.entry-result-no {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: var(--text);
+}
+.entry-result-sub {
+  font-size: 26rpx;
+  color: var(--text-weak);
+  margin-top: 8rpx;
+}
+
+/* 无结果 */
+.entry-none {
+  padding: 80rpx 0 40rpx;
+  text-align: center;
+}
+.entry-none-tip {
+  font-size: 26rpx;
+  color: var(--text-weak);
+  margin: 8rpx 40rpx 28rpx;
+}
+
+/* 还没搜时的引导 */
+.entry-intro {
+  padding: 140rpx 40rpx 0;
+  text-align: center;
+}
+.entry-intro-emoji { font-size: 88rpx; }
+.entry-intro-title {
+  font-size: 34rpx;
+  font-weight: 600;
+  margin-top: 24rpx;
+}
+.entry-intro-sub {
+  font-size: 26rpx;
+  color: var(--text-weak);
+  margin-top: 12rpx;
+}
+.entry-intro-link {
+  font-size: 26rpx;
+  color: var(--brand);
+  margin-top: 48rpx;
+}
+
+/* ===== 第 2 步：车次抬头 ===== */
+
+.entry-stops-wrap { padding-left: 0; padding-right: 0; }
+
+.entry-train {
+  display: flex;
+  align-items: center;
+  padding: 8rpx 24rpx 20rpx;
+}
+.entry-train-back {
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8rpx;
+}
+.entry-train-back:active { opacity: .5; }
+.entry-train-main { flex: 1; min-width: 0; }
+.entry-train-head {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+.entry-train-no {
+  font-size: 38rpx;
+  font-weight: 700;
+}
+.entry-train-sub {
+  font-size: 24rpx;
+  color: var(--text-weak);
+  margin-top: 6rpx;
+}
+
+/* ===== 提示条：吸顶，永远带「重选」 ===== */
+
+.entry-hint {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin: 0 24rpx 16rpx;
+  padding: 20rpx 24rpx;
+  background: var(--brand-light);
+  border-radius: var(--radius-md);
+}
+.entry-hint-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 26rpx;
+  color: var(--brand-deep);
+  line-height: 1.4;
+}
+.entry-hint-reset {
+  flex: none;
+  font-size: 26rpx;
+  color: var(--brand);
+  padding: 4rpx 12rpx;
+}
+.entry-hint-reset:active { opacity: .5; }
+/* 还没选任何站时「重选」无事可做，压暗但保留位置，免得提示条高度来回跳 */
+.entry-hint-reset.is-off { opacity: .3; }
+
+/* ===== 停站表 ===== */
+
+.entry-stop-list {
+  background: var(--surface);
+  margin: 0 24rpx;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+.entry-stop {
+  display: flex;
+  align-items: center;
+  height: 104rpx;
+  padding-right: 24rpx;
+  /* 上百站的普速车会整屏滚动，这里只做颜色过渡，不做位移动画 */
+  transition: background-color .15s linear;
+}
+
+/* 左侧路线：上半线 + 圆点 + 下半线，拼成一条贯穿的竖线 */
+.entry-rail {
+  flex: none;
+  width: 64rpx;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.entry-rail-line {
+  flex: 1;
+  width: 4rpx;
+  background: var(--hairline);
+}
+.entry-rail-line.is-hidden { background: transparent; }
+.entry-rail-dot {
+  flex: none;
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  background: #c7c7cc;
+  margin: 4rpx 0;
+}
+/* 始发站与终到站的圆点加粗变色，一眼看出全程两端 */
+.entry-rail-dot.is-origin,
+.entry-rail-dot.is-terminal {
+  width: 22rpx;
+  height: 22rpx;
+  background: var(--surface);
+  border: 5rpx solid var(--text-weak);
+  margin: 0;
+}
+
+.entry-stop-no {
+  flex: none;
+  width: 56rpx;
+  font-size: 24rpx;
+  color: #c7c7cc;
+}
+.entry-stop-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 30rpx;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.entry-stop-times {
+  flex: none;
+  width: 210rpx;
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 12rpx;
+}
+/* 始发站无到达、终到站无发车，后端给 null，这里显示「—」 */
+.entry-stop-time {
+  font-size: 26rpx;
+  color: var(--text-weak);
+  font-variant-numeric: tabular-nums;
+}
+/* 跨日标注，实测最大 +3 天 */
+.entry-stop-day {
+  font-size: 20rpx;
+  color: #ff9f0a;
+  flex: none;
+}
+/* 自始发站起的累计营业里程，与票面一致 */
+.entry-stop-km {
+  flex: none;
+  width: 130rpx;
+  text-align: right;
+  font-size: 24rpx;
+  color: #c7c7cc;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 选中态 ── */
+.entry-stop.is-mid { background: var(--brand-light); }
+.entry-stop.is-from,
+.entry-stop.is-to { background: var(--brand-light); }
+.entry-stop.is-from .entry-stop-name,
+.entry-stop.is-to .entry-stop-name {
+  color: var(--brand-deep);
+  font-weight: 700;
+}
+.entry-stop.is-from .entry-rail-dot,
+.entry-stop.is-to .entry-rail-dot {
+  width: 22rpx;
+  height: 22rpx;
+  background: var(--brand);
+  border: none;
+  margin: 0;
+  box-shadow: 0 0 0 6rpx var(--brand-glow);
+}
+/* 区段内的竖线整段染色，形成「坐过的这一截」 */
+.entry-stop.is-mid .entry-rail-line,
+.entry-stop.is-mid .entry-rail-dot,
+.entry-stop.is-from .entry-rail-line,
+.entry-stop.is-to .entry-rail-line {
+  background: var(--brand);
+}
+/* 上车站的上半线、下车站的下半线在区段之外，不染 */
+.entry-stop.is-from .entry-rail-line:first-child,
+.entry-stop.is-to .entry-rail-line:last-child {
+  background: var(--hairline);
+}
+.entry-stop.is-from .entry-rail-line.is-hidden,
+.entry-stop.is-to .entry-rail-line.is-hidden {
+  background: transparent;
+}
+
+/* ===== 第 3 步：确认面板 ===== */
+
+.entry-confirm {
+  padding: 32rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-radius: 24rpx 24rpx 0 0;
+}
+.entry-confirm-title {
+  font-size: 36rpx;
+  font-weight: 700;
+  text-align: center;
+}
+.entry-confirm-sub {
+  font-size: 26rpx;
+  color: var(--text-weak);
+  text-align: center;
+  margin: 8rpx 0 24rpx;
+}
+.entry-confirm-actions {
+  display: flex;
+  gap: 24rpx;
+  margin-top: 40rpx;
+}
+.entry-btn-half { flex: 1; }
+
+/* ===== 拉时刻表时的遮罩 ===== */
+
+.entry-mask {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 99;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, .7);
+}

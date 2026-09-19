@@ -3,6 +3,7 @@ Component({
     active: 'pages/chat/chat',
     list: [
       { value: 'pages/chat/chat', label: '问答', icon: 'chat' },
+      { value: 'pages/rail/rail', label: '行程', icon: 'map-route-planning' },
       { value: 'pages/profile/profile', label: '我的', icon: 'user-circle' },
       { value: 'pages/about/about', label: '关于', icon: 'info-circle' },
     ],

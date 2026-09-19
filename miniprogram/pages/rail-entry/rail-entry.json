@@ -1,0 +1,12 @@
+{
+  "navigationBarTitleText": "记录乘车",
+  "usingComponents": {
+    "t-search": "tdesign-miniprogram/search/search",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-popup": "tdesign-miniprogram/popup/popup",
+    "t-date-time-picker": "tdesign-miniprogram/date-time-picker/date-time-picker",
+    "t-textarea": "tdesign-miniprogram/textarea/textarea",
+    "t-input": "tdesign-miniprogram/input/input",
+    "t-loading": "tdesign-miniprogram/loading/loading"
+  }
+}

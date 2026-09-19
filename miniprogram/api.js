@@ -155,4 +155,77 @@ function reportCorrection(payload) {
   })
 }
 
-module.exports = { conversationStream, popularQuestions, reportCorrection }
+// ---- 通用带鉴权请求 ----
+// 沿用 reportCorrection 的约定：401 自动重登并重试一次，reject 出来的 Error.message
+// 可直接 wx.showToast 给用户看。后端 HTTPException 的 detail 本身就是中文用户文案
+// （如「没有找到车次 G999。」「下车站必须在上车站之后。」），故原样透传。
+function request(path, method, data) {
+  return new Promise((resolve, reject) => {
+    function send(token, isRetry) {
+      wx.request({
+        url: BASE_URL + path,
+        method: method || 'GET',
+        header: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        data: data,
+        success(res) {
+          if (res.statusCode === 401 && !isRetry) {
+            auth.relogin().then((t) => send(t, true)).catch(() => reject(new Error('登录失效，请重试')))
+            return
+          }
+          if (res.statusCode < 400) { resolve(res.data); return }
+          const detail = res.data && res.data.detail
+          if (typeof detail === 'string' && detail) { reject(new Error(detail)); return }
+          reject(new Error(res.statusCode === 429 ? '今日查询次数已达上限，请明天再来'
+            : '请求失败（' + res.statusCode + '）'))
+        },
+        fail(err) { reject(new Error((err && err.errMsg) || '网络请求失败')) },
+      })
+    }
+    auth.ensureToken().then((t) => send(t, false)).catch(() => reject(new Error('登录失败，请重试')))
+  })
+}
+
+// ---- 铁路乘车记录 ----
+// 后端接口见 backend/app/rail/api.py。注意车次号 29% 含 '/'（K551/K554），
+// 放进 path 前必须 encodeURIComponent。
+const rail = {
+  // → [{number, class, origin, terminal, stop_count, total_km}]，最多 20 条
+  searchTrains(q) {
+    if (!q) return Promise.resolve([])
+    return request('/rail/trains?q=' + encodeURIComponent(q)).then((r) => (r && r.trains) || [])
+  },
+
+  // → {number, class, origin, terminal, stop_count, total_km, gtfs_version,
+  //    stops: [{seq, station, arrival, departure, day_offset, dist_km, lat, lon}]}
+  // 时刻为 'HH:MM' 或 null（始发站无到达、终到站无发车）；坐标已是 GCJ-02，可直接喂 <map>。
+  timetable(number) {
+    return request('/rail/trains/' + encodeURIComponent(number))
+  },
+
+  // body: {train_number, ride_date:'YYYY-MM-DD', from_seq, to_seq, note, source:'timetable'}
+  //   或 {train_number, ride_date, from_station, to_station, note, source:'manual'}
+  // → {id}
+  createJourney(body) { return request('/rail/journeys', 'POST', body) },
+
+  // → [{id, train_number, ride_date, from_station, to_station, from_seq, to_seq,
+  //     note, departure, arrival, day_offset, distance_km, stale, source, ...}]
+  // 按乘车日期倒序。stale=true 表示车次已不在当前运行图里，时刻/里程为 null。
+  listJourneys(limit, offset) {
+    const q = '?limit=' + (limit || 50) + '&offset=' + (offset || 0)
+    return request('/rail/journeys' + q).then((r) => (r && r.journeys) || [])
+  },
+
+  // 只能改 ride_date / note
+  updateJourney(id, fields) { return request('/rail/journeys/' + id, 'PATCH', fields) },
+
+  deleteJourney(id) { return request('/rail/journeys/' + id, 'DELETE') },
+
+  // 清空全部 → {deleted: n}
+  clearJourneys() { return request('/rail/journeys', 'DELETE') },
+
+  // → {journey_count, total_km, station_count, city_count, province_count,
+  //    class_counts:{种别:次数}, first_ride, latest_ride}
+  stats() { return request('/rail/stats') },
+}
+
+module.exports = { conversationStream, popularQuestions, reportCorrection, request, rail }
