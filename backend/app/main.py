@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 
 from app import config, rag, store, ingest_url, popular, changelog, auth
 from app import health as health_mod
+from app.rail import api as rail_api
 from app.schemas import (
     ChatRequest, ChatResponse, Source,
     ParseUrlRequest, ParseUrlResponse, Fragment,
@@ -36,6 +37,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 铁路乘车记录：同服务内的独立模块（ADR-0007），路由挂 /rail。
+# 它与 RAG 问答无共享状态——独立的库、独立的额度。
+app.include_router(rail_api.router)
 
 
 def _check_ready():
