@@ -39,6 +39,9 @@ WX_APPSECRET = os.getenv("WX_APPSECRET")
 DAILY_LIMIT = int(os.getenv("DAILY_LIMIT", "50"))
 # 每个用户每日报错次数上限，与问答额度相互独立；0 表示不限。
 FEEDBACK_DAILY_LIMIT = int(os.getenv("FEEDBACK_DAILY_LIMIT", "10"))
+# 每个用户每日铁路时刻表查询上限，与问答额度相互独立；0 表示不限。
+# 这类查询廉价（纯本地 SQLite），给得宽松，额度只为拦爬全量时刻表。
+RAIL_QUERY_DAILY_LIMIT = int(os.getenv("RAIL_QUERY_DAILY_LIMIT", "500"))
 
 CHAT_MODEL = CFG["chat_model"]
 EMBED_MODEL = CFG["embed_model"]
