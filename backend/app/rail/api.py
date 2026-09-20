@@ -13,6 +13,8 @@ from fastapi import APIRouter, Header, HTTPException
 from app import auth
 from app.rail import geo, journey, store
 from app.rail.schemas import JourneyCreate, JourneyUpdate
+# 注销要连奖赏钱那三张表一起清（见 delete_account）。跨模块 import 仅此一处。
+from app.rewardcash import store as rc_store
 
 router = APIRouter(prefix="/rail", tags=["rail"])
 
@@ -133,7 +135,7 @@ def _enrich(j, cache):
 @router.post("/journeys")
 def create_journey(req: JourneyCreate, authorization: str = Header(None)):
     """新增一条乘车记录。"""
-    user_id = auth.require_rail_user(authorization)
+    user_id = auth.require_app_user(authorization)
     _check_date(req.ride_date)
     if req.source not in ("timetable", "manual"):
         raise HTTPException(422, "source 只能是 timetable 或 manual。")
@@ -173,7 +175,7 @@ def create_journey(req: JourneyCreate, authorization: str = Header(None)):
 @router.get("/journeys")
 def list_journeys(limit: int = 50, offset: int = 0, authorization: str = Header(None)):
     """按乘车日期倒序列出，每条回填站名/时刻/区段里程。"""
-    user_id = auth.require_rail_user(authorization)
+    user_id = auth.require_app_user(authorization)
     limit = max(1, min(limit, LIST_LIMIT_MAX))
     cache = {}
     items = [_enrich(j, cache) for j in journey.list_for(user_id, limit, max(0, offset))]
@@ -182,7 +184,7 @@ def list_journeys(limit: int = 50, offset: int = 0, authorization: str = Header(
 
 @router.patch("/journeys/{jid}")
 def update_journey(jid: str, req: JourneyUpdate, authorization: str = Header(None)):
-    user_id = auth.require_rail_user(authorization)
+    user_id = auth.require_app_user(authorization)
     fields = {k: v for k, v in req.model_dump().items() if v is not None}
     if "ride_date" in fields:
         _check_date(fields["ride_date"])
@@ -193,7 +195,7 @@ def update_journey(jid: str, req: JourneyUpdate, authorization: str = Header(Non
 
 @router.delete("/journeys/{jid}")
 def delete_journey(jid: str, authorization: str = Header(None)):
-    user_id = auth.require_rail_user(authorization)
+    user_id = auth.require_app_user(authorization)
     if not journey.delete(user_id, jid):
         raise HTTPException(404, "记录不存在。")
     return {"ok": True}
@@ -202,7 +204,7 @@ def delete_journey(jid: str, authorization: str = Header(None)):
 @router.delete("/journeys")
 def delete_all_journeys(authorization: str = Header(None)):
     """清空全部记录。个保法要求用户能一键删除自己的数据。"""
-    user_id = auth.require_rail_user(authorization)
+    user_id = auth.require_app_user(authorization)
     return {"deleted": journey.delete_all(user_id)}
 
 
@@ -213,7 +215,7 @@ def stats(authorization: str = Header(None)):
     `station_count` 按**去重的途经车站**计——坐 seq 3→9，途中 7 个站都算到过。
     这是打卡语义：车经过了就算走过那条线。
     """
-    user_id = auth.require_rail_user(authorization)
+    user_id = auth.require_app_user(authorization)
 
     stations, cities, provinces = set(), set(), set()
     class_counts = {}
@@ -284,7 +286,7 @@ def map_data(authorization: str = Header(None)):
     `points` 取 `from_seq..to_seq` 之间的**全部途经站**，与 `/rail/stats` 的
     `station_count` 同一口径（打卡语义：车经过了就算到过）。
     """
-    user_id = auth.require_rail_user(authorization)
+    user_id = auth.require_app_user(authorization)
 
     legs = []
     # 站名 → {name, lat, lon, count}。站名唯一（`stop_id` 即 `STN_<站名>`），可安全作键。
@@ -362,12 +364,16 @@ EXPORT_DROP = ("id", "user_id", "from_seq", "to_seq")
 
 @router.get("/export")
 def export_data(authorization: str = Header(None)):
-    """导出本人全部乘车记录。个保法的「可携带权」，**不扣任何额度**。
+    """导出本人**整个账号**的数据。个保法的「可携带权」，**不扣任何额度**。
+
+    路径挂在 `rail` 下是历史原因（当初只有铁路模块有用户数据），它导的是全部。
+    ⚠️ **新增用户数据表的模块，必须在这里加一段**——同 `delete_account`。
+    不给各模块单开导出口，是因为那样客户端有机会只导一半而不自知。
 
     小程序端拿这份 JSON 自己写文件走 `wx.shareFileMessage`，
     故不加附件下载头，`Content-Type` 就是默认的 `application/json`。
     """
-    user_id = auth.require_rail_user(authorization)
+    user_id = auth.require_app_user(authorization)
 
     cache = {}
     # 导出就是全部，不设 limit（与 `/rail/stats` 同一写法）
@@ -383,26 +389,38 @@ def export_data(authorization: str = Header(None)):
         "exported_at": datetime.now().isoformat(timespec="seconds"),
         "journey_count": len(rows),
         "journeys": journeys,
+        # 奖赏钱：规则集不含在内，那是全局知识、不属于任何用户
+        "rewardcash": {
+            "months": rc_store.list_months(user_id, 100000),
+            "spends": rc_store.list_spends(user_id, limit=100000),
+            "settings": rc_store.get_settings(user_id),
+        },
     }
 
 
 @router.delete("/account")
 def delete_account(authorization: str = Header(None)):
-    """注销账号：删光乘车记录、身份、内部账号与全部登录 session。
+    """注销账号：删光乘车记录、奖赏钱记录、身份、内部账号与全部登录 session。
 
-    个保法的「删除权」，必须真删，不是打个标记。路由放在 `rail` 下是因为
-    目前只有铁路模块有服务端用户数据；身份/session 那一层交给 `auth.delete_account`。
+    个保法的「删除权」，必须真删，不是打个标记。路由挂在 `rail` 下是历史原因
+    （当初只有铁路模块有服务端用户数据），**它管的是整个账号**；身份/session
+    那一层交给 `auth.delete_account`。
+
+    ⚠️ **新增用户数据表的模块，必须在这里加一行清理**。漏了的表会留下一堆
+    谁也删不掉、也无从关联的孤儿行——注销后那个 user_id 再也查不回来了。
+    目前需要清的：`rail`（乘车记录）、`rewardcash`（月结／签账／设置）。
 
     **顺序不能反**：先按 user_id 删业务数据，再删身份。反过来的话 user_id
-    就查不回来了，乘车记录会成为一堆谁也删不掉的孤儿行。
+    就查不回来了。
 
     ⚠️ 注销后用户再 `wx.login` 拿到的是**同一个 openid**，但 `user_id_of`
     查不到身份会新建一个全新 user_id——旧数据已删且已断开关联，新账号从零开始。
     """
     openid = auth.require_user(authorization)
-    # 这里不能用 require_rail_user：它拿的 user_id 和下面要删的身份是同一份，
+    # 这里不能用 require_app_user：它拿的 user_id 和下面要删的身份是同一份，
     # 但注销要的是 openid（session 按 openid 存），两个都得有。
     user_id = auth.user_id_of("wx", openid)
     deleted = journey.delete_all(user_id)
+    rc_deleted = rc_store.delete_all_for(user_id)
     auth.delete_account(openid)
-    return {"deleted_journeys": deleted}
+    return {"deleted_journeys": deleted, "deleted_rewardcash": rc_deleted}

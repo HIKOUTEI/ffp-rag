@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from app import config, rag, store, ingest_url, popular, changelog, auth
 from app import health as health_mod
 from app.rail import api as rail_api
+from app.rewardcash import api as rewardcash_api
 from app.schemas import (
     ChatRequest, ChatResponse, Source,
     ParseUrlRequest, Fragment,
@@ -42,6 +43,10 @@ app.add_middleware(
 # 它与 RAG 问答无共享状态——独立的库、独立的额度。
 app.include_router(rail_api.router)
 
+# 奖赏钱记录：同上（ADR-0009 / ADR-0010），路由挂 /rewardcash。
+# 这是第三条不属于 RAG 问答的产品线，不进向量库、不参与检索。
+app.include_router(rewardcash_api.router)
+
 
 def _check_ready():
     if not config.API_KEY:
@@ -54,15 +59,6 @@ def _check_ready():
         raise
     except Exception:
         raise HTTPException(500, "向量库未初始化，请先运行: python -m scripts.ingest")
-
-
-def _require_admin(authorization: str):
-    """校验管理员令牌。Header 形如 'Bearer <token>' 或直接 <token>。"""
-    if not config.ADMIN_TOKEN:
-        raise HTTPException(500, "服务未配置 ADMIN_TOKEN，管理接口不可用。")
-    token = (authorization or "").removeprefix("Bearer ").strip()
-    if token != config.ADMIN_TOKEN:
-        raise HTTPException(401, "未授权：ADMIN_TOKEN 不匹配。")
 
 
 def _source_dict(r):
@@ -178,7 +174,7 @@ def report_correction(req: CorrectionRequest, authorization: str = Header(None))
 def admin_parse_url(req: ParseUrlRequest, authorization: str = Header(None)):
     """启动异步解析（抓取+AI解析+去重检测），立即返回 task_id。前端轮询进度。
     若该 URL 已录入（规范化后库中已存在正文片段），同步硬拦，不抓取、不调 AI。"""
-    _require_admin(authorization)
+    auth.require_admin(authorization)
     if not config.API_KEY:
         raise HTTPException(500, "未设置 LLM_API_KEY。")
     existing = store.find_ingested_url(req.url)
@@ -197,7 +193,7 @@ def admin_parse_url(req: ParseUrlRequest, authorization: str = Header(None)):
 @app.get("/admin/parse-url/{task_id}")
 def admin_parse_url_status(task_id: str, authorization: str = Header(None)):
     """轮询解析进度/结果。完成时 result 含 {url,title,raw_text,fragments}。"""
-    _require_admin(authorization)
+    auth.require_admin(authorization)
     t = ingest_url.get_parse_task(task_id)
     if not t:
         raise HTTPException(404, "任务不存在。")
@@ -215,7 +211,7 @@ def admin_parse_url_status(task_id: str, authorization: str = Header(None)):
 @app.post("/admin/ingest-parsed", response_model=IngestParsedResponse)
 def admin_ingest_parsed(req: IngestParsedRequest, authorization: str = Header(None)):
     """把审阅认可的片段追加入库。"""
-    _require_admin(authorization)
+    auth.require_admin(authorization)
     if not config.API_KEY:
         raise HTTPException(500, "未设置 LLM_API_KEY。")
     added, total = store.add_fragments([f.model_dump() for f in req.fragments])
@@ -230,14 +226,14 @@ def admin_ingest_parsed(req: IngestParsedRequest, authorization: str = Header(No
 @app.get("/admin/docs")
 def admin_list_docs(authorization: str = Header(None)):
     """列出库中所有正文知识（供管理/编辑）。"""
-    _require_admin(authorization)
+    auth.require_admin(authorization)
     return {"docs": store.all_docs()}
 
 
 @app.patch("/admin/docs/{doc_id}")
 def admin_update_doc(doc_id: str, req: UpdateDocRequest, authorization: str = Header(None)):
     """修改一条知识的正文（重算向量+重建别名），并记历史+日志。"""
-    _require_admin(authorization)
+    auth.require_admin(authorization)
     if not config.API_KEY:
         raise HTTPException(500, "未设置 LLM_API_KEY。")
     ok, old = store.update_doc(doc_id, req.text)
@@ -252,7 +248,7 @@ def admin_update_doc(doc_id: str, req: UpdateDocRequest, authorization: str = He
 @app.delete("/admin/docs/{doc_id}")
 def admin_delete_doc(doc_id: str, authorization: str = Header(None)):
     """删除一条知识（连别名），并记历史+日志。"""
-    _require_admin(authorization)
+    auth.require_admin(authorization)
     ok, old = store.delete_doc(doc_id)
     if not ok:
         raise HTTPException(404, "知识不存在或不可删除。")
@@ -265,14 +261,14 @@ def admin_delete_doc(doc_id: str, authorization: str = Header(None)):
 @app.get("/admin/docs/{doc_id}/history")
 def admin_doc_history(doc_id: str, authorization: str = Header(None)):
     """某条知识的历史版本。"""
-    _require_admin(authorization)
+    auth.require_admin(authorization)
     return {"history": changelog.list_history(doc_id)}
 
 
 @app.get("/admin/changelog")
 def admin_changelog(limit: int = 100, authorization: str = Header(None)):
     """全库变更流水。"""
-    _require_admin(authorization)
+    auth.require_admin(authorization)
     return {"changes": changelog.list_changes(limit)}
 
 
@@ -283,7 +279,7 @@ def admin_corrections(status: str = "pending", limit: int = 100,
                       authorization: str = Header(None)):
     """纠错队列。默认只列待处理；status=all 看全部。
     每条把 doc_ids 回填成当前知识正文，便于后台就地编辑。"""
-    _require_admin(authorization)
+    auth.require_admin(authorization)
     items = changelog.list_corrections(status, limit)
     for it in items:
         docs = []
@@ -302,7 +298,7 @@ def admin_corrections(status: str = "pending", limit: int = 100,
 def admin_resolve_correction(correction_id: int, req: ResolveCorrectionRequest,
                              authorization: str = Header(None)):
     """标记一条纠错记录为已处理，并记下处理备注。"""
-    _require_admin(authorization)
+    auth.require_admin(authorization)
     if not changelog.resolve_correction(correction_id, req.resolution):
         raise HTTPException(404, "纠错记录不存在或已处理。")
     return {"ok": True}
@@ -313,7 +309,7 @@ def admin_resolve_correction(correction_id: int, req: ResolveCorrectionRequest,
 @app.post("/admin/health-check")
 def admin_health_check(authorization: str = Header(None)):
     """启动一次知识库体检（异步），立即返回 task_id。"""
-    _require_admin(authorization)
+    auth.require_admin(authorization)
     if not config.API_KEY:
         raise HTTPException(500, "未设置 LLM_API_KEY。")
     tid = health_mod.start_check()
@@ -323,7 +319,7 @@ def admin_health_check(authorization: str = Header(None)):
 @app.get("/admin/health-check/{task_id}")
 def admin_health_check_status(task_id: str, authorization: str = Header(None)):
     """轮询体检进度/结果。"""
-    _require_admin(authorization)
+    auth.require_admin(authorization)
     t = health_mod.get_task(task_id)
     if not t:
         raise HTTPException(404, "任务不存在。")

@@ -177,9 +177,26 @@ def user_id_of(provider: str, external_id: str) -> str:
         ).fetchone()[0]
 
 
-def require_rail_user(authorization: str) -> str:
-    """校验登录，返回内部 user_id。供乘车记录接口使用，**不扣任何额度**。"""
+def require_app_user(authorization: str) -> str:
+    """校验登录，返回内部 user_id。供各产品线的用户数据接口使用，**不扣任何额度**。
+
+    与铁路无关——乘车记录、奖赏钱记录都用它。原名 `require_rail_user`，
+    在奖赏钱模块接入时改成现名。
+    """
     return user_id_of("wx", require_user(authorization))
+
+
+def require_admin(authorization: str):
+    """校验管理员令牌。Header 形如 'Bearer <token>' 或直接 <token>。
+
+    放在这里而不是 `main.py`，是为了让子包（`rail/` `rewardcash/`）能用——
+    从 `main` 反向 import 会成环。
+    """
+    if not config.ADMIN_TOKEN:
+        raise HTTPException(500, "服务未配置 ADMIN_TOKEN，管理接口不可用。")
+    token = (authorization or "").removeprefix("Bearer ").strip()
+    if token != config.ADMIN_TOKEN:
+        raise HTTPException(401, "未授权：ADMIN_TOKEN 不匹配。")
 
 
 def delete_account(openid: str):
