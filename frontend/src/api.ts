@@ -222,3 +222,118 @@ export async function resolveCorrection(id: number, resolution: string) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
+
+// ---- 奖赏钱规则集 ----
+// 以下 interface 手抄自 backend/app/rewardcash/schemas.py，没有代码生成也没有校验：
+// 后端改字段这边不报错，只会在运行时拿到 undefined。改任一侧都要对着另一侧核一遍。
+
+export type CapPeriod = 'calendar_year' | 'calendar_month' | 'promo_period' | 'membership_year'
+export type CapKind = 'spend' | 'reward'
+export type RuleKind = 'rate' | 'flat'
+export type Recurrence = 'recurring' | 'one_off'
+export type Confidence = 'official' | 'user_verified' | 'unverified' | 'unavailable'
+export type Region = 'mainland' | 'macau' | 'hongkong' | 'overseas'
+export type MerchantCategory = 'dining' | 'other'
+export type Channel = 'rewardplus_qr' | 'unionpay_qr' | 'mobile_pay' | 'physical_card'
+  | 'alipayhk' | 'wechat' | 'online' | 'other'
+
+export interface RewardCategory {
+  key: string
+  name: string
+  kind: RuleKind
+}
+
+export interface Cap {
+  kind: CapKind
+  amount: number
+  period: CapPeriod
+}
+
+export interface ThresholdScope {
+  region?: Region | null
+}
+
+export interface Threshold {
+  amount_hkd: number
+  period: CapPeriod
+  scope?: ThresholdScope
+}
+
+export interface Conditions {
+  region?: Region[] | null
+  merchant_category?: MerchantCategory[] | null
+  channel?: Channel[] | null
+  settled_hkd?: boolean | null
+}
+
+export interface RuleSource {
+  url?: string | null
+  clause?: string | null
+  checked_at?: string | null
+}
+
+export interface Rule {
+  id: string
+  name: string
+  kind: RuleKind
+  rate?: number | null          // kind=rate 时必填
+  flat_amount?: number | null   // kind=flat 时必填
+  recurrence: Recurrence
+  reward_category?: string | null   // null = 未知，不参与上限反推
+  caps?: Cap[]
+  threshold?: Threshold | null
+  requires_enrolment?: boolean
+  conditions?: Conditions
+  period_start?: string | null      // YYYY-MM-DD
+  period_end?: string | null
+  status: Confidence
+  source?: RuleSource
+  note?: string | null
+}
+
+export interface RuleSet {
+  categories: RewardCategory[]
+  rules: Rule[]
+}
+
+export interface RuleVersion {
+  version: number
+  updated_at: string
+  note: string | null
+}
+
+// 规则集接口的 4xx 必须把 detail 原样抛出：422 的 detail 是
+// 「规则集校验不通过：<pydantic 完整报错>」，里面的字段路径是定位问题的唯一线索。
+async function throwWithDetail(res: Response): Promise<never> {
+  let msg = `HTTP ${res.status}`
+  try {
+    const d = await res.json()
+    if (d.detail) msg = d.detail
+  } catch { /* ignore */ }
+  throw new Error(msg)
+}
+
+export async function getAdminRules(version?: number) {
+  const url = '/rewardcash/admin/rules' + (version === undefined ? '' : '?version=' + version)
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + getToken() } })
+  if (!res.ok) await throwWithDetail(res)
+  return res.json() as Promise<{ version: number; ruleset: RuleSet }>
+}
+
+export async function putAdminRules(data: RuleSet, note: string) {
+  const res = await fetch('/rewardcash/admin/rules', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + getToken() },
+    body: JSON.stringify({ data, note }),
+  })
+  if (!res.ok) await throwWithDetail(res)
+  return res.json() as Promise<{ version: number }>
+}
+
+export async function listRuleVersions(limit = 50) {
+  const res = await fetch('/rewardcash/admin/rules/versions?limit=' + limit, {
+    headers: { Authorization: 'Bearer ' + getToken() },
+  })
+  if (!res.ok) await throwWithDetail(res)
+  return res.json() as Promise<{ versions: RuleVersion[] }>
+}

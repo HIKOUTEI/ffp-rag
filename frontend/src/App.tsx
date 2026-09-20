@@ -7,8 +7,10 @@ import {
   startHealthCheck, pollHealthCheck,
   listDocs, updateDoc, deleteDoc, listChanges,
   listCorrections, resolveCorrection,
+  getAdminRules, putAdminRules, listRuleVersions,
   type Fragment, type ChatSource, type ChatMessage, type HealthReport,
   type DocItem, type ChangeItem, type CorrectionItem,
+  type RuleSet, type RuleVersion,
 } from './api'
 
 const DOMAINS = ['airline', 'credit_card', 'hotel', 'other']
@@ -246,6 +248,63 @@ export default function App() {
   }
 
   const pendingCount = corrections.filter(c => c.status === 'pending').length
+
+  // ---- 奖赏钱规则维护 ----
+  // 只维护规则，不碰任何个人数据。形态是带校验的 JSON 编辑器：
+  // 规则 6 条、维护者 1 人，真正的约束全在后端 pydantic 里，做字段级表单只会两边漂移。
+  const [showRules, setShowRules] = useState(false)
+  const [rcText, setRcText] = useState('')             // 编辑区里的 JSON 原文
+  const [rcVersion, setRcVersion] = useState<number | null>(null)  // 编辑区这份的版本号
+  const [rcVersions, setRcVersions] = useState<RuleVersion[]>([])
+  const [rcNote, setRcNote] = useState('')             // 改了什么，随 PUT 一起存
+  const [rcErr, setRcErr] = useState('')               // 后端 detail 原样展示，不包装
+  const [rcLoading, setRcLoading] = useState(false)
+
+  // 版本列表按 version DESC，第一条就是最新版；编辑区显示的若不是它，说明在看历史版本
+  const rcLatest = rcVersions.length > 0 ? rcVersions[0].version : rcVersion
+  const rcHistoryView = rcVersion !== null && rcLatest !== null && rcVersion !== rcLatest
+
+  // version 缺省取最新版。历史版本只读展示，不做回滚。
+  async function loadRules(version?: number) {
+    setRcLoading(true); setRcErr('')
+    try {
+      const r = await getAdminRules(version)
+      setRcVersion(r.version)
+      setRcText(JSON.stringify(r.ruleset, null, 2))
+      const v = await listRuleVersions()
+      setRcVersions(v.versions)
+    } catch (e) {
+      setRcErr((e as Error).message)
+    } finally { setRcLoading(false) }
+  }
+
+  async function toggleRules() {
+    const next = !showRules
+    setShowRules(next)
+    if (next && rcVersion === null) await loadRules()
+  }
+
+  async function saveRules() {
+    let parsed: RuleSet
+    try {
+      // 语法错在前端就拦下，不必往返一次
+      parsed = JSON.parse(rcText)
+    } catch (e) {
+      setRcErr('JSON 语法错误（未发送请求）：' + (e as Error).message)
+      return
+    }
+    setRcLoading(true); setRcErr('')
+    try {
+      const r = await putAdminRules(parsed, rcNote.trim())
+      setMsg({ type: 'ok', text: `规则集已保存，当前第 ${r.version} 版` })
+      setRcNote('')
+      await loadRules()
+    } catch (e) {
+      // 422 的 detail 是 pydantic 的完整报错，里面的字段路径是定位问题的唯一线索，
+      // 所以原样显示，不要包装成「保存失败」。校验不过不落库，旧版本仍在下发。
+      setRcErr((e as Error).message)
+    } finally { setRcLoading(false) }
+  }
 
   // 来源按 url 去重
   function uniqSources(sources: ChatSource[]) {
@@ -551,6 +610,94 @@ export default function App() {
                 </div>
               </div>
             </div>
+          )}
+        </Card>
+
+        <Card>
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-slate-400">
+              返现规则 · 奖赏钱规则集（JSON，整份替换）
+              {showRules && rcVersion !== null && (
+                <span className="ml-2 rounded-full bg-emerald-500/20 text-emerald-300 px-2 py-0.5">
+                  第 {rcVersion} 版{rcHistoryView ? '（历史）' : '（当前）'}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={toggleRules}
+              className="rounded-lg px-4 py-1.5 text-sm font-medium bg-slate-600 hover:bg-slate-500 transition"
+            >
+              {showRules ? '收起' : '打开'}
+            </button>
+          </div>
+
+          {showRules && (
+            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="mt-3 space-y-3">
+              {rcLoading && <div className="text-xs text-slate-400">处理中…</div>}
+
+              {rcHistoryView && (
+                <div className="flex items-center gap-3 rounded-md bg-amber-500/10 border border-amber-500/30 px-2.5 py-1.5 text-xs text-amber-300">
+                  正在查看第 {rcVersion} 版（只读，不做回滚）
+                  <button
+                    onClick={() => loadRules()}
+                    className="text-amber-200 underline hover:text-amber-100"
+                  >
+                    回到最新版
+                  </button>
+                </div>
+              )}
+
+              <textarea
+                value={rcText} onChange={e => setRcText(e.target.value)}
+                readOnly={rcHistoryView}
+                rows={22} spellCheck={false}
+                placeholder="规则集 JSON：{ categories: [...], rules: [...] }"
+                className={`w-full rounded-md bg-slate-900/70 border border-slate-700 px-3 py-2 font-mono text-xs leading-relaxed outline-none focus:border-sky-500 resize-y ${
+                  rcHistoryView ? 'text-slate-400' : 'text-slate-200'}`}
+              />
+
+              {rcErr && (
+                <pre className="rounded-md bg-rose-500/10 border border-rose-500/40 px-2.5 py-2 text-xs text-rose-300 whitespace-pre-wrap max-h-60 overflow-auto">
+                  {rcErr}
+                </pre>
+              )}
+
+              {!rcHistoryView && (
+                <div className="flex gap-2">
+                  <input
+                    value={rcNote} onChange={e => setRcNote(e.target.value)}
+                    placeholder="备注：这一版改了什么"
+                    className="flex-1 rounded-md bg-slate-900/60 border border-slate-700 px-2 py-1 text-xs outline-none focus:border-sky-500"
+                  />
+                  <button
+                    onClick={saveRules} disabled={rcLoading}
+                    className="rounded-md px-3 py-1 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 transition"
+                  >
+                    保存新版本
+                  </button>
+                </div>
+              )}
+
+              <div>
+                <div className="text-xs font-medium text-slate-300 mb-1">版本记录（点一条查看那一版的 JSON）</div>
+                <ul className="space-y-1 max-h-40 overflow-auto">
+                  {rcVersions.map(v => (
+                    <li
+                      key={v.version}
+                      onClick={() => loadRules(v.version)}
+                      className={`cursor-pointer rounded-md px-2 py-1 text-xs flex gap-2 transition ${
+                        v.version === rcVersion
+                          ? 'bg-sky-500/15 text-sky-200 border border-sky-500/40'
+                          : 'text-slate-400 hover:bg-slate-700/40'}`}
+                    >
+                      <span className="shrink-0 font-mono">v{v.version}</span>
+                      <span className="shrink-0 text-slate-500">{v.updated_at.slice(0, 16).replace('T', ' ')}</span>
+                      <span className="flex-1 truncate">{v.note || '（无备注）'}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </motion.div>
           )}
         </Card>
 
