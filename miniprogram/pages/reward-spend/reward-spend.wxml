@@ -1,0 +1,94 @@
+<!-- 逐笔签账。可选功能：唯一不可替代的用途是月中推算门槛进度。 -->
+<view class="rc-wrap">
+
+  <view class="rc-form-hint">
+    只有逐笔签账能在月中算出门槛进度（比如内地餐饮那条「本月累计 HK$1,200」）。
+    不想记也没关系，月结照样能算上限与预测。
+  </view>
+
+  <view class="rc-card">
+    <t-cell title="日期" note="{{dateText}}" arrow hover bindtap="openDatePicker" />
+
+    <view class="rc-field-label">币种</view>
+    <view class="rc-pills">
+      <view wx:for="{{currencies}}" wx:key="value" class="rc-pill {{currency === item.value ? 'is-on' : ''}}"
+            data-value="{{item.value}}" bindtap="onPickCurrency">{{item.label}}</view>
+    </view>
+
+    <t-input label="金额" type="digit" placeholder="原币金额" value="{{amount}}"
+             align="right" bind:change="onAmountInput" />
+    <t-input label="折合港币" type="digit" placeholder="必填" value="{{amountHkd}}"
+             align="right" bind:change="onHkdInput" />
+    <!-- 后端不接汇率服务，1:1 只是粗估（迎新条款本身就按 1:1 算） -->
+    <view wx:if="{{showHkdHint}}" class="rc-note">已按 1:1 预填，可以改。门槛与签账上限一律以港币计。</view>
+
+    <view class="rc-field-label">地区</view>
+    <view class="rc-pills">
+      <view wx:for="{{regions}}" wx:key="value" class="rc-pill {{region === item.value ? 'is-on' : ''}}"
+            data-value="{{item.value}}" bindtap="onPickRegion">{{item.label}}</view>
+    </view>
+
+    <view class="rc-field-label">商户类别</view>
+    <view class="rc-pills">
+      <view wx:for="{{merchants}}" wx:key="value" class="rc-pill {{merchantCategory === item.value ? 'is-on' : ''}}"
+            data-value="{{item.value}}" bindtap="onPickMerchant">{{item.label}}</view>
+    </view>
+
+    <!-- 付法。后三项（AlipayHK / 微信支付 / 网上）都不在「二维码支付」定义内，
+         只有基本 0.4%——灰字直接写在选项下面，不放进帮助文档里。 -->
+    <view class="rc-field-label">付法</view>
+    <view wx:for="{{channels}}" wx:key="value" class="rc-opt"
+          data-value="{{item.value}}" bindtap="onPickChannel">
+      <view class="rc-opt-main">
+        <view class="rc-opt-title">{{item.label}}</view>
+        <view wx:if="{{item.sub}}" class="rc-opt-sub">{{item.sub}}</view>
+      </view>
+      <view class="rc-opt-check">
+        <t-icon wx:if="{{channel === item.value}}" name="check" size="36rpx" color="#0a84ff" />
+      </view>
+    </view>
+
+    <!-- DCC：整套规则里最容易白丢钱的地方，所以开关必须配一句说明 -->
+    <view class="dcc-row">
+      <view class="dcc-main">
+        <view class="rc-opt-title">被 DCC 成港币结算</view>
+        <view class="rc-opt-sub">
+          刷卡时被问「港币还是人民币」，选了港币就勾上——会同时失去扫码 +2% 和 Travel Guru +6%。
+        </view>
+        <view class="rc-action" bindtap="onDccTip">这是什么？</view>
+      </view>
+      <t-switch value="{{settledHkd}}" bind:change="onToggleDcc" />
+    </view>
+
+    <t-input label="备注" placeholder="可选" value="{{note}}" align="right" bind:change="onNoteInput" />
+  </view>
+
+  <view class="rc-submit">
+    <t-button theme="primary" size="large" block bindtap="onSave"
+              disabled="{{saving}}" loading="{{saving}}">记一笔</t-button>
+  </view>
+
+  <!-- ===== 列表：按日期倒序，左滑删除 ===== -->
+  <view wx:if="{{spends.length}}" class="rc-section-title"><text>已记录</text></view>
+
+  <t-swipe-cell wx:for="{{spends}}" wx:key="id" class="spend-item">
+    <view class="rc-card spend-card">
+      <view class="spend-head">
+        <text class="spend-hkd">{{item.hkdText}}</text>
+        <text class="rc-row-right">{{item.dateText}}</text>
+      </view>
+      <view class="spend-sub">{{item.amountText}} · {{item.regionText}} · {{item.merchantText}} · {{item.channelText}}</view>
+      <view wx:if="{{item.dcc}}" class="rc-note rc-note-warn">已被 DCC 成港币，这笔吃不到扫码加成</view>
+      <view wx:if="{{item.note}}" class="rc-note">{{item.note}}</view>
+    </view>
+    <view slot="right" class="rc-swipe-del" bindtap="onDelete" data-id="{{item.id}}">删除</view>
+  </t-swipe-cell>
+
+  <view wx:if="{{!loading && !spends.length}}" class="rc-empty">
+    <t-empty icon="money" description="还没有逐笔记录" />
+  </view>
+</view>
+
+<t-date-time-picker visible="{{datePickerVisible}}" mode="date" format="YYYY-MM-DD"
+                    title="签账日期" value="{{spendDate}}"
+                    bind:confirm="onDateConfirm" bind:cancel="onDateCancel" />

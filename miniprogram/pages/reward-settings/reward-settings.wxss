@@ -1,0 +1,54 @@
+@import "/styles/reward.wxss";
+
+/* 登记状态与设置页自有样式。共用骨架在 styles/reward.wxss。 */
+
+/* 规则未开放登记时整块置灰，但仍可读——不是隐藏 */
+.is-disabled { opacity: .55; }
+
+.state-pills { margin-top: 16rpx; }
+
+/* 日期行：标签 — 值 — 箭头 */
+.date-line {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 20rpx;
+  padding: 16rpx 20rpx;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.date-line:active { opacity: .7; }
+.date-label {
+  font-size: 26rpx;
+  color: var(--text-weak);
+  flex: 1;
+}
+.date-value {
+  font-size: 28rpx;
+  color: var(--text);
+}
+
+/* 等级胶囊：主名 + 下方小字（费率与上限） */
+.tier-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14rpx 28rpx;
+}
+.tier-name {
+  font-size: 28rpx;
+  line-height: 1.2;
+}
+.tier-sub {
+  font-size: 20rpx;
+  color: var(--text-weak);
+  margin-top: 4rpx;
+}
+.rc-pill.is-on .tier-sub { color: var(--brand); }
+
+.privacy-title { margin-top: 48rpx; }
+.privacy-tip {
+  text-align: center;
+  color: #b3bccb;
+  margin-top: 20rpx;
+}

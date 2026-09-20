@@ -1,0 +1,76 @@
+<!-- 登记状态与设置。不单开 tab，入口在总览页的齿轮。 -->
+<view class="rc-wrap">
+
+  <view class="rc-form-hint">
+    最红自主奖赏和内地餐饮 +3% 都要先在汇丰 Reward+ App 里登记，登记前的签账一分不补算。
+    这里如实标一下，上限进度才不会骗你。
+  </view>
+
+  <!-- ===== 登记状态：三态，不是开关 ===== -->
+  <view class="rc-section-title"><text>需要登记的规则</text></view>
+  <view class="rc-card">
+    <view wx:for="{{rows}}" wx:key="id" class="rc-row {{item.disabled ? 'is-disabled' : ''}}">
+      <view class="rc-row-name">{{item.name}}</view>
+
+      <view class="rc-pills state-pills">
+        <view wx:for="{{states}}" wx:for-item="st" wx:key="value"
+              class="rc-pill {{item.state === st.value ? 'is-on' : ''}} {{item.disabled ? 'is-off' : ''}}"
+              data-i="{{index}}" data-value="{{st.value}}" bindtap="onPickState">{{st.label}}</view>
+      </view>
+
+      <!-- 登记日期：决定从哪天起计，所以「已登记」必须配日期 -->
+      <view wx:if="{{item.state === 'yes'}}" class="date-line" data-i="{{index}}" bindtap="openRowDate">
+        <text class="date-label">登记日期</text>
+        <text class="date-value">{{item.dateText}}</text>
+        <t-icon name="chevron-right" size="30rpx" color="#8e8e93" />
+      </view>
+
+      <view wx:if="{{item.hint}}" class="rc-note">{{item.hint}}</view>
+    </view>
+
+    <view wx:if="{{!rows.length && !loading}}" class="rc-note">当前规则集里没有需要登记的规则。</view>
+  </view>
+
+  <!-- ===== Travel Guru 会籍年 =====
+       会籍年起算日是 cap.period === 'membership_year' 唯一的起算依据，
+       不填那条上限只能显示「需先填会籍年起算日」。 -->
+  <block wx:if="{{showGuru}}">
+    <view class="rc-section-title"><text>Travel Guru 会籍年</text></view>
+    <view class="rc-card {{guruDisabled ? 'is-disabled' : ''}}">
+      <view wx:if="{{guruHint}}" class="rc-note rc-note-warn">{{guruHint}}</view>
+
+      <view class="date-line" bindtap="openMembershipDate">
+        <text class="date-label">会籍年起算日</text>
+        <text class="date-value">{{membershipText}}</text>
+        <t-icon name="chevron-right" size="30rpx" color="#8e8e93" />
+      </view>
+
+      <view class="rc-field-label">等级</view>
+      <view class="rc-pills">
+        <view wx:for="{{tiers}}" wx:key="value"
+              class="rc-pill tier-pill {{guruTier === item.value ? 'is-on' : ''}} {{guruDisabled ? 'is-off' : ''}}"
+              data-value="{{item.value}}" bindtap="onPickTier">
+          <text class="tier-name">{{item.label}}</text>
+          <text class="tier-sub">{{item.sub}}</text>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <view class="rc-submit">
+    <t-button theme="primary" size="large" block bindtap="onSave"
+              disabled="{{saving || loading}}" loading="{{saving}}">保存</t-button>
+  </view>
+
+  <!-- ===== 数据清理 ===== -->
+  <view class="rc-section-title privacy-title"><text>数据</text></view>
+  <t-cell-group theme="card">
+    <t-cell title="清空奖赏钱数据" description="删除全部月结、逐笔与设置，账号保留"
+            leftIcon="delete" arrow hover bindtap="onClearData" />
+  </t-cell-group>
+  <view class="rc-note privacy-tip">奖赏钱记录属个人财务信息，保存在服务器，仅你本人可见。</view>
+</view>
+
+<t-date-time-picker visible="{{datePickerVisible}}" mode="date" format="YYYY-MM-DD"
+                    title="选择日期" value="{{pickerValue}}"
+                    bind:confirm="onDateConfirm" bind:cancel="onDateCancel" />

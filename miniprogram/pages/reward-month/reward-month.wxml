@@ -1,0 +1,62 @@
+<!-- 月结录入：一月抄一次，目标是一分钟内抄完。
+     输入框顺序 = 规则集 categories 的顺序 = Reward+ App 里的显示顺序。
+     **顺序错了就没法照抄**，不要在这里按字母或金额重排。 -->
+<view class="rc-wrap">
+
+  <!-- 抄数动线。放在最上面，用户打开这一页先看到该去哪儿抄 -->
+  <view class="copy-hint">
+    <text class="copy-hint-strong">打开汇丰 Reward+ →「奖赏钱」→ 照着抄</text>
+    <text class="copy-hint-sub">几个数字，一分钟就好。抄错了随时回来改，同一个月只会有一条记录。</text>
+  </view>
+
+  <view class="rc-card">
+    <t-cell title="月份" note="{{monthText}}" arrow hover bindtap="openMonthPicker" />
+    <view wx:if="{{existing}}" class="rc-note existing-tip">这个月已经记过了，下面是旧值，改完保存即可覆盖。</view>
+  </view>
+
+  <!-- ===== 流量：当月各类别赚取的奖赏钱 ===== -->
+  <view class="rc-section-title"><text>本月赚取</text></view>
+  <view class="rc-card">
+    <!-- 类别由后端下发，新增类别不用发版 -->
+    <t-input wx:for="{{cats}}" wx:key="key" label="{{item.name}}" type="digit"
+             placeholder="没有就留空" value="{{item.value}}" align="right"
+             data-i="{{index}}" bind:change="onCatInput" />
+    <view wx:if="{{!cats.length && !loading}}" class="rc-note">规则集里还没有奖赏类别，请稍后重试。</view>
+  </view>
+
+  <!-- ===== 存量：期末快照。三个字段都可空，留空就是没抄，不是 0 ===== -->
+  <view class="rc-section-title"><text>期末快照</text></view>
+  <view class="rc-card">
+    <t-input label="奖赏钱余额" type="digit" placeholder="可留空" value="{{balance}}"
+             align="right" bind:change="onBalanceInput" />
+    <t-input label="即将到期" type="digit" placeholder="可留空" value="{{expiringAmount}}"
+             align="right" bind:change="onExpiringInput" />
+    <t-cell title="到期日" note="{{expiringDate || '可留空'}}" arrow hover bindtap="openDatePicker" />
+    <view wx:if="{{expiringDate}}" class="rc-action" bindtap="onClearExpiringDate">清除到期日</view>
+
+    <!-- snapshot_at 是 Reward+ 页面上那个「截至」时间，不等于提交时刻。
+         跨月时这个差别很重要：月底最后一天提交、抄的却是上个月的数。 -->
+    <t-cell title="数据截至" note="{{snapshotText}}" arrow hover bindtap="openSnapshotPicker" />
+    <view class="rc-note">「截至」取 Reward+ 页面上显示的那个时间，默认今天，可以改。</view>
+  </view>
+
+  <view class="rc-submit">
+    <t-button theme="primary" size="large" block bindtap="onSave"
+              disabled="{{saving || loading}}" loading="{{saving}}">保存</t-button>
+  </view>
+</view>
+
+<!-- 月份选择器。end 卡在今天：未来的月份没有数可抄。 -->
+<t-date-time-picker visible="{{monthPickerVisible}}" mode="month" format="YYYY-MM"
+                    title="选择月份" value="{{month}}" end="{{monthEnd}}"
+                    bind:confirm="onMonthConfirm" bind:cancel="onMonthCancel" />
+
+<!-- 到期日：可以是未来的日子，不设上界 -->
+<t-date-time-picker visible="{{datePickerVisible}}" mode="date" format="YYYY-MM-DD"
+                    title="到期日" value="{{expiringDate}}"
+                    bind:confirm="onDateConfirm" bind:cancel="onDateCancel" />
+
+<!-- 数据截至日。⚠️ 后端只收 YYYY-MM-DD，所以这里是日期选择器不是日期时间选择器 -->
+<t-date-time-picker visible="{{snapshotPickerVisible}}" mode="date" format="YYYY-MM-DD"
+                    title="数据截至" value="{{snapshotAt}}"
+                    bind:confirm="onSnapshotConfirm" bind:cancel="onSnapshotCancel" />

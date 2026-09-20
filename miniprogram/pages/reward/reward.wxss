@@ -1,0 +1,189 @@
+@import "/styles/reward.wxss";
+
+/* 「奖赏」总览页自有样式。共用骨架（.rc-card / .rc-bar / .rc-row …）在
+   styles/reward.wxss，这里只补本页独有的排版。 */
+
+/* ===== 1. 余额卡 ===== */
+.balance-card { animation: rcFadeUp .5s var(--ease-spring) both; }
+
+.balance-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.balance-gear { padding: 8rpx; }
+.balance-gear:active { opacity: .5; }
+
+.balance-num {
+  font-size: 80rpx;
+  font-weight: 700;
+  color: var(--brand);
+  line-height: 1.15;
+  margin-top: 8rpx;
+}
+.balance-sub {
+  font-size: 24rpx;
+  color: var(--text-weak);
+  margin-top: 6rpx;
+}
+/* 「该抄这个月的数了」：超过 35 天未更新时出现，是行动按钮不是提示语 */
+.balance-stale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24rpx;
+  padding: 18rpx 24rpx;
+  border-radius: var(--radius-md);
+  background: var(--brand-light);
+  color: var(--brand);
+  font-size: 26rpx;
+  font-weight: 600;
+}
+.balance-stale:active { opacity: .7; }
+
+.balance-none {
+  font-size: 40rpx;
+  font-weight: 600;
+  color: var(--text);
+  margin: 12rpx 0 12rpx;
+}
+
+/* ===== 2. 即将到期 ===== */
+.expire-card { border-left: 8rpx solid #ff3b30; }
+.expire-head {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+.expire-title {
+  font-size: 26rpx;
+  color: #ff3b30;
+  font-weight: 600;
+}
+.expire-num {
+  font-size: 52rpx;
+  font-weight: 700;
+  color: #ff3b30;
+  line-height: 1.2;
+  margin-top: 6rpx;
+}
+.expire-when {
+  font-size: 24rpx;
+  color: var(--text-weak);
+  margin-top: 4rpx;
+}
+.expire-card.is-urgent .expire-when { color: #ff3b30; }
+
+/* ===== 3. 上限进度 ===== */
+.cap-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 6rpx;
+}
+.cap-used {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ===== 4. 本月门槛 ===== */
+.th-ok {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #34c759;
+  margin-top: 8rpx;
+}
+.th-short {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 8rpx;
+}
+
+/* ===== 5. 类别分布 ===== */
+.cat-row { padding: 16rpx 0; }
+.cat-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+.cat-name {
+  font-size: 28rpx;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  min-width: 0;
+}
+/* 定额类别的小标记。点一下 / 长按都给说明 */
+.cat-flat {
+  font-size: 20rpx;
+  color: var(--text-weak);
+  background: var(--surface-2);
+  border-radius: 6rpx;
+  padding: 2rpx 10rpx;
+  line-height: 1.4;
+  flex: none;
+}
+.cat-amount {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--text);
+  flex: none;
+}
+.cat-bar {
+  height: 12rpx;
+  border-radius: 999rpx;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin-top: 12rpx;
+}
+.cat-bar-fill {
+  height: 100%;
+  border-radius: 999rpx;
+  background: var(--brand);
+}
+/* 定额类别用浅一档的颜色，与费率型在视觉上就分开 */
+.cat-bar-fill.is-flat { background: #b9d9ff; }
+
+/* ===== 6. 期末预计 ===== */
+.proj-num {
+  font-size: 56rpx;
+  font-weight: 700;
+  color: var(--brand);
+  line-height: 1.2;
+  margin-bottom: 8rpx;
+}
+.proj-excluded { margin-top: 10rpx; }
+.proj-note {
+  margin-top: 12rpx;
+  padding-top: 12rpx;
+  border-top: 2rpx solid var(--hairline);
+  font-size: 22rpx;
+}
+
+/* ===== 尾巴 ===== */
+.privacy-tip {
+  text-align: center;
+  color: #b3bccb;
+  margin-top: 24rpx;
+}
+
+/* ===== 首屏加载遮罩 ===== */
+.rc-loading {
+  position: fixed;
+  left: 0; right: 0; top: 0; bottom: 0;
+  background: rgba(245, 246, 248, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+@keyframes rcFadeUp {
+  from { opacity: 0; transform: translateY(20rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}

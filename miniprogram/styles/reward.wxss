@@ -1,0 +1,180 @@
+/* 「奖赏」四页共用的样式。各页在 wxss 顶部 @import "/styles/reward.wxss";
+   变量沿用 app.wxss 的设计系统（--brand / --surface / --radius-lg / --shadow-soft），
+   此处不另立一套颜色和圆角。骨架与 styles/rail.wxss 对齐，只是前缀换成 .rc-。 */
+
+.rc-wrap {
+  min-height: 100vh;
+  padding: 24rpx 24rpx calc(140rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+/* ===== 卡片 ===== */
+.rc-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  padding: 28rpx;
+  margin-bottom: 24rpx;
+}
+
+/* ===== 分区标题 ===== */
+.rc-section-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--text-weak);
+  margin: 8rpx 8rpx 16rpx;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.rc-section-sub {
+  font-size: 24rpx;
+  font-weight: 400;
+}
+
+.rc-stat-label {
+  font-size: 24rpx;
+  color: var(--text-weak);
+}
+
+/* ===== 行 ===== */
+.rc-row { padding: 22rpx 0; }
+.rc-row + .rc-row { border-top: 2rpx solid var(--hairline); }
+.rc-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+.rc-row-name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+}
+.rc-row-right {
+  font-size: 26rpx;
+  color: var(--text-weak);
+  flex: none;
+}
+
+/* ===== 进度条 =====
+   三个档位刻意长得不一样，**不共用一套**：
+     .rc-bar            蓝色实心，只有真的算出来了才用
+     .rc-bar.is-unknown 灰色斜纹，表示「算不出来」——不是 0%
+     .rc-bar.is-blocked 灰色斜纹（同上），另配「未登记」红字
+   斜纹是刻意的：一条纯灰的空条在余光里仍然像「进度 0」，斜纹一眼就不是数据。 */
+.rc-bar {
+  height: 16rpx;
+  border-radius: 999rpx;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin: 16rpx 0 12rpx;
+}
+.rc-bar-fill {
+  height: 100%;
+  border-radius: 999rpx;
+  background: var(--brand);
+  transition: width .5s var(--ease-spring);
+}
+.rc-bar.is-unknown,
+.rc-bar.is-blocked {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(60, 60, 67, 0.10) 0, rgba(60, 60, 67, 0.10) 8rpx,
+    rgba(60, 60, 67, 0.04) 8rpx, rgba(60, 60, 67, 0.04) 16rpx
+  );
+}
+
+/* 说明文字：灰条下面那句「为什么没有数字」 */
+.rc-note {
+  font-size: 24rpx;
+  color: var(--text-weak);
+  line-height: 1.5;
+}
+.rc-note-warn { color: #ff3b30; }
+
+/* 可点的提示行（去登记 / 去记签账） */
+.rc-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4rpx;
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: var(--brand);
+}
+.rc-action:active { opacity: .6; }
+
+/* ===== 表单 ===== */
+.rc-form-hint {
+  font-size: 24rpx;
+  color: var(--text-weak);
+  line-height: 1.6;
+  margin: 0 8rpx 20rpx;
+}
+.rc-field-label {
+  font-size: 26rpx;
+  color: var(--text-weak);
+  margin: 24rpx 0 12rpx;
+}
+
+/* 三态 / 多选一的胶囊组。用手搓的而不是 t-radio：
+   要在选项下方挂灰字说明（「只有基本 0.4%」），radio 塞不进去。 */
+.rc-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+.rc-pill {
+  padding: 12rpx 28rpx;
+  border-radius: 999rpx;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 26rpx;
+  line-height: 1.3;
+}
+.rc-pill.is-on {
+  background: var(--brand-light);
+  color: var(--brand);
+  font-weight: 600;
+}
+.rc-pill.is-off { opacity: .4; }
+.rc-pill:active { opacity: .7; }
+
+/* 选项列表（付法那种带灰字说明的） */
+.rc-opt {
+  display: flex;
+  align-items: center;
+  padding: 20rpx 0;
+  gap: 16rpx;
+}
+.rc-opt + .rc-opt { border-top: 2rpx solid var(--hairline); }
+.rc-opt-main { flex: 1; min-width: 0; }
+.rc-opt-title { font-size: 28rpx; color: var(--text); }
+.rc-opt-sub {
+  font-size: 22rpx;
+  color: var(--text-weak);
+  margin-top: 4rpx;
+}
+.rc-opt-check { flex: none; width: 44rpx; text-align: right; }
+
+/* ===== 空状态 ===== */
+.rc-empty { padding: 100rpx 0 60rpx; }
+
+/* ===== 侧滑删除（与行程页同款观感） ===== */
+.rc-swipe-del {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding: 0 40rpx;
+  background: #ff3b30;
+  color: #fff;
+  font-size: 30rpx;
+}
+
+/* ===== 底部主按钮（表单页） ===== */
+.rc-submit {
+  margin-top: 40rpx;
+  padding-bottom: env(safe-area-inset-bottom);
+}

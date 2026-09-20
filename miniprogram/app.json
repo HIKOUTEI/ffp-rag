@@ -4,8 +4,12 @@
     "pages/rail/rail",
     "pages/profile/profile",
     "pages/about/about",
+    "pages/reward/reward",
     "pages/rail-entry/rail-entry",
-    "pages/rail-map/rail-map"
+    "pages/rail-map/rail-map",
+    "pages/reward-month/reward-month",
+    "pages/reward-spend/reward-spend",
+    "pages/reward-settings/reward-settings"
   ],
   "usingComponents": {
     "t-chat-content": "tdesign-miniprogram/chat-content/chat-content",
@@ -31,6 +35,7 @@
     "list": [
       { "pagePath": "pages/chat/chat", "text": "问答" },
       { "pagePath": "pages/rail/rail", "text": "行程" },
+      { "pagePath": "pages/reward/reward", "text": "奖赏" },
       { "pagePath": "pages/profile/profile", "text": "我的" },
       { "pagePath": "pages/about/about", "text": "关于" }
     ]

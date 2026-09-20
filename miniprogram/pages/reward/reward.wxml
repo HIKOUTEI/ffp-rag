@@ -1,0 +1,178 @@
+<view class="rc-wrap">
+
+  <!-- ===== 1. 余额卡 ===== -->
+  <view class="rc-card balance-card">
+    <view class="balance-head">
+      <view class="rc-stat-label">奖赏钱余额</view>
+      <view class="balance-gear" bindtap="onOpenSettings">
+        <t-icon name="setting" size="36rpx" color="#8e8e93" />
+      </view>
+    </view>
+
+    <block wx:if="{{hasBalance}}">
+      <view class="balance-num">{{balanceText}}</view>
+      <!-- snapshot_at 必须显示：用户要知道这个数有多旧 -->
+      <view class="balance-sub">{{snapshotText}}<text wx:if="{{fromMonthText}}"> · 来自 {{fromMonthText}}</text></view>
+      <!-- 超过 35 天没更新，给一条明确的行动路径，不只是提示 -->
+      <view wx:if="{{stale}}" class="balance-stale" bindtap="onAddMonth">
+        <text>该抄这个月的数了</text>
+        <t-icon name="chevron-right" size="30rpx" color="#0a84ff" />
+      </view>
+    </block>
+
+    <!-- 一条月结都没有（或余额没填）。**不显示 0**——0 会被当成真的余额。 -->
+    <block wx:else>
+      <view class="balance-none">还没有月结记录</view>
+      <view class="rc-note">打开汇丰 Reward+ App，把「奖赏钱」那一屏的几个数字抄进来，一分钟就好。</view>
+      <view class="rc-submit">
+        <t-button theme="primary" size="large" block bindtap="onAddMonth">记这个月的数</t-button>
+      </view>
+    </block>
+  </view>
+
+  <!-- ===== 2. 即将到期 =====
+       amount 为 0 或 null 时 expiring 就是 null，整块不渲染——
+       「即将到期 $0」是句废话。 -->
+  <view wx:if="{{expiring}}" class="rc-card expire-card {{expiring.urgent ? 'is-urgent' : ''}}">
+    <view class="expire-head">
+      <t-icon name="time" size="34rpx" color="#ff3b30" />
+      <text class="expire-title">即将到期</text>
+    </view>
+    <view class="expire-num">{{expiring.amountText}}</view>
+    <view class="expire-when">{{expiring.whenText}}</view>
+  </view>
+
+  <!-- ===== 3. 上限进度 =====
+       三档渲染，**不共用一套**（分档在 reward-util.capView）：
+         progress 正常进度条 + 数字
+         blocked  未登记 → 灰斜纹条 + 红字 + 去设置页登记
+         unknown  算不出来 → 灰斜纹条 + derivation_note
+       ⚠️ 后两档一律不画百分比。画 0% 等于告诉用户「还没开始用」，那是谎话。 -->
+  <block wx:if="{{caps.length}}">
+    <view class="rc-section-title"><text>上限进度</text></view>
+    <view class="rc-card">
+      <view wx:for="{{caps}}" wx:key="ruleId" class="rc-row">
+        <view class="rc-row-head">
+          <text class="rc-row-name">{{item.ruleName}}</text>
+          <text class="rc-row-right">{{item.pctText || item.capText}}</text>
+        </view>
+
+        <view class="rc-bar {{item.mode === 'progress' ? '' : (item.mode === 'blocked' ? 'is-blocked' : 'is-unknown')}}">
+          <view wx:if="{{item.mode === 'progress'}}" class="rc-bar-fill" style="width:{{item.barWidth}}"></view>
+        </view>
+
+        <!-- ① 算出来了 -->
+        <block wx:if="{{item.mode === 'progress'}}">
+          <view class="cap-line">
+            <text class="cap-used">{{item.usedText}}</text>
+            <text class="rc-row-right">{{item.remainingText}}</text>
+          </view>
+          <view class="rc-note">{{item.windowText}}<text wx:if="{{item.daysLeftText}}"> · {{item.daysLeftText}}</text></view>
+        </block>
+
+        <!-- ② 未登记：签账一分不计。这比显示一个数字重要得多 -->
+        <block wx:elif="{{item.mode === 'blocked'}}">
+          <view class="rc-note rc-note-warn">未登记，签账不计入</view>
+          <view class="rc-note">{{item.capText}} · {{item.windowText}}</view>
+          <view class="rc-action" bindtap="onGoEnrol">
+            <text>去汇丰 Reward+ 登记，然后在这里标一下</text>
+            <t-icon name="chevron-right" size="26rpx" color="#0a84ff" />
+          </view>
+        </block>
+
+        <!-- ③ 算不出来：把原因（derivation_note）如实写出来 -->
+        <block wx:else>
+          <view class="rc-note">{{item.note || '暂时算不出来'}}</view>
+          <view class="rc-note">{{item.capText}} · {{item.windowText}}</view>
+          <view wx:if="{{item.ruleUnavailable}}" class="rc-note">这项规则目前未开放登记。</view>
+        </block>
+      </view>
+    </view>
+  </block>
+
+  <!-- ===== 4. 本月门槛 ===== -->
+  <block wx:if="{{thresholds.length}}">
+    <view class="rc-section-title"><text>本月门槛</text></view>
+    <view class="rc-card">
+      <view wx:for="{{thresholds}}" wx:key="ruleId" class="rc-row">
+        <view class="rc-row-head">
+          <text class="rc-row-name">{{item.ruleName}}</text>
+          <t-icon wx:if="{{item.mode === 'met'}}" name="check-circle-filled" size="38rpx" color="#34c759" />
+        </view>
+        <view class="rc-note">{{item.requirement}}</view>
+
+        <block wx:if="{{item.mode === 'met'}}">
+          <view class="th-ok">已达成 · 已累计 {{item.currentText}}</view>
+        </block>
+
+        <block wx:elif="{{item.mode === 'short'}}">
+          <view class="th-short">{{item.shortText}}</view>
+          <view class="rc-note">已累计 {{item.currentText}}<text wx:if="{{item.daysLeftText}}"> · 本周期{{item.daysLeftText}}</text></view>
+        </block>
+
+        <!-- 门槛只能靠逐笔算：月结是次月才抄的，那时周期早结束了 -->
+        <block wx:else>
+          <view class="rc-note">{{item.note || '记几笔签账才能算'}}</view>
+          <view class="rc-action" bindtap="onOpenSpend">
+            <text>去记几笔签账</text>
+            <t-icon name="chevron-right" size="26rpx" color="#0a84ff" />
+          </view>
+        </block>
+      </view>
+    </view>
+  </block>
+
+  <!-- ===== 5. 类别分布 =====
+       横向条形，不用饼图——四个类别的饼图读不出差距。 -->
+  <block wx:if="{{cats.length}}">
+    <view class="rc-section-title">
+      <text>赚取来源</text>
+      <text class="rc-section-sub">{{flowRangeText}} · 合计 {{flowTotalText}}</text>
+    </view>
+    <view class="rc-card">
+      <view wx:for="{{cats}}" wx:key="key" class="cat-row">
+        <view class="cat-head">
+          <view class="cat-name">
+            <text>{{item.name}}</text>
+            <!-- 定额收入的小标记：长按说明它为什么不参与反推 -->
+            <text wx:if="{{item.flat}}" class="cat-flat" bindtap="onFlatTip" bindlongpress="onFlatTip">定额</text>
+          </view>
+          <text class="cat-amount">{{item.amountText}}</text>
+        </view>
+        <view class="cat-bar">
+          <view class="cat-bar-fill {{item.flat ? 'is-flat' : ''}}" style="width:{{item.width}}"></view>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <!-- ===== 6. 期末预计 ===== -->
+  <view class="rc-section-title"><text>期末预计</text></view>
+  <view class="rc-card">
+    <block wx:if="{{proj}}">
+      <view class="proj-num">+{{proj.additionalText}}</view>
+      <view class="rc-note">
+        按 {{proj.basisText}}（每月 {{proj.perMonthText}}）外推<text wx:if="{{proj.windowEndText}}">，算到 {{proj.windowEndText}} 为止</text>。
+      </view>
+      <!-- 这行必须显示，否则用户会怀疑预测偏低 -->
+      <view wx:if="{{proj.excludedText}}" class="rc-note proj-excluded">{{proj.excludedText}}</view>
+      <view wx:if="{{proj.note}}" class="rc-note proj-note">{{proj.note}}</view>
+    </block>
+    <block wx:else>
+      <view class="rc-note">再记一个月就能预测。外推至少要 2 个完整月做基期，1 个月没有「速率」可言。</view>
+    </block>
+  </view>
+
+  <!-- ===== 次级入口 ===== -->
+  <t-cell-group theme="card">
+    <t-cell title="月结录入" description="一月抄一次，照 Reward+ 抄" leftIcon="edit-1" arrow hover bindtap="onAddMonth" />
+    <t-cell title="逐笔签账" description="可选。只有它能在月中算出门槛进度" leftIcon="money" arrow hover bindtap="onOpenSpend" />
+    <t-cell title="登记状态与设置" leftIcon="setting" arrow hover bindtap="onOpenSettings" />
+  </t-cell-group>
+  <view class="rc-note privacy-tip">奖赏钱记录属个人财务信息，保存在服务器，仅你本人可见。</view>
+</view>
+
+<!-- 首次加载遮罩，避免空状态一闪而过 -->
+<view wx:if="{{loading}}" class="rc-loading">
+  <t-loading theme="circular" size="48rpx" text="正在汇总" layout="vertical" />
+</view>
