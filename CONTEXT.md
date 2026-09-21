@@ -14,6 +14,11 @@ ADR-0007、ADR-0008）与**奖赏钱记录**（见下方「奖赏钱」及 ADR-0
 **常旅客 / FFP**：
 Frequent Flyer Program。本项目的领域范畴：航司里程与会籍权益、信用卡积分转点、酒店积分互通。
 
+**控制台 / Console**：
+管理员维护知识库与返现规则的那个网页端（`frontend/`，托管在 `/console/`）。
+只给维护者一个人用，不是面向用户的产品——用户侧是小程序。
+_Avoid_: 管理后台、后台管理页面、admin panel
+
 **域 / domain**：
 一条知识片段所属的领域分类，取值 `airline` / `credit_card` / `hotel` / `personal_account` / `other`。
 _Avoid_: 分类、category

@@ -1,6 +1,7 @@
-# frontend —— 管理后台
+# frontend —— 控制台
 
-React 19 + TypeScript + Vite + Tailwind 3。给我自己用的单页管理控制台，不是面向用户的产品。
+React 19 + TypeScript + Vite + Tailwind 3。给我自己用的单页控制台，不是面向用户的产品。
+（叫「控制台 / console」，别叫管理后台，见 `CONTEXT.md` 词条。）
 
 ## 部署形态
 
@@ -18,13 +19,26 @@ React 19 + TypeScript + Vite + Tailwind 3。给我自己用的单页管理控制
 鉴权：admin token 存 localStorage（key `ffp_admin_token`），`post(url, body, auth=true)`
 和 `authGet` 自动带 `Authorization`。后端 4xx 的 `detail` 会被抽出来当 `Error.message`。
 
-## 现状：App.tsx 是个 810 行的巨型组件
+## 结构：状态全在 App.tsx，分区组件是纯展示
 
-一个 `App()` 里塞了 ~25 个 `useState`，覆盖 URL 解析、问答、知识体检、知识管理、纠错队列
-五块互不相关的功能。**改动时不要顺手重构**，按现有模式在对应区块加代码就行；
-`useState` 按功能块分组并留注释分隔（照现有写法）。
+`App.tsx` 是**状态容器**：~30 个 `useState` 和所有 handler 都在这里，按功能块分组
+留注释分隔。它渲染 `<Shell>`，按 `section` 挑一个分区组件，用 props 把数据和回调传下去。
 
-真要拆分请单独开一个 `.scratch/` issue 讨论，不要夹带在功能改动里。
+```
+src/theme.ts       accent 查表（分区主题色）
+src/layout/        Shell（侧栏+主区+光晕）、Sidebar、ui（Card/SectionHeader/Stat）
+src/sections/      Workbench / Health / Corrections / Manage / Rules
+```
+
+**分区组件里不要放 useState**（纯 UI 的开合除外，如抽屉、令牌栏折叠）。状态一旦下沉，
+切区就会被卸载——解析到一半去看纠错队列，回来片段就没了。
+
+**accent 类名必须写死在 `theme.ts` 的查表里，不许拼接。** Tailwind 3 只认源码里的
+字面量字符串，`` `bg-${accent}-500` `` 会被静默 purge：构建不报错、类型不报错、
+运行时颜色直接消失。
+
+加一个分区：`theme.ts` 里加 `SectionId` 与 accent → `Sidebar.tsx` 的 `GROUPS` 加一项
+→ 写 `sections/Xxx.tsx` → `App.tsx` 加状态和一个 `{section === 'xxx' && <Xxx .../>}`。
 
 ## 其他
 
