@@ -9,6 +9,37 @@ export function setToken(t: string) {
   localStorage.setItem(TOKEN_KEY, t)
 }
 
+// 后端 4xx/5xx 的 detail 是写好的中文用户文案（见 backend/CLAUDE.md），必须原样抽出来：
+// 401 的 detail 直说「未授权：ADMIN_TOKEN 不匹配。」，规则集 422 的 detail 里带 pydantic
+// 字段路径。丢掉它就只剩一个 `HTTP 401`，得翻后端源码才知道是哪种失败。
+async function errorOf(res: Response): Promise<string> {
+  let msg = `HTTP ${res.status}`
+  try {
+    const d = await res.json()
+    if (d.detail) msg = d.detail
+  } catch { /* 响应体不是 JSON（如网关错误页），退回状态码 */ }
+  return msg
+}
+
+async function throwWithDetail(res: Response): Promise<never> {
+  throw new Error(await errorOf(res))
+}
+
+// 校验令牌是否真被后端认可。侧栏的「已连接」必须以此为准——只看字符串非空的话，
+// 粘错一个字符也是绿灯，然后每个 /admin/* 请求都 401。
+// 挑 /admin/changelog?limit=1 是因为它最轻：读一行 sqlite，不碰 Chroma、不调 AI。
+export async function verifyToken(t: string): Promise<{ ok: boolean; error: string }> {
+  try {
+    const res = await fetch('/admin/changelog?limit=1', {
+      headers: { Authorization: 'Bearer ' + t },
+    })
+    return res.ok ? { ok: true, error: '' } : { ok: false, error: await errorOf(res) }
+  } catch (e) {
+    // fetch 本身失败（后端没起、代理不通），跟令牌错是两码事，文案要分得开
+    return { ok: false, error: '连不上后端：' + ((e as Error).message || '网络不可达') }
+  }
+}
+
 export interface DuplicateInfo {
   score: number
   source: string
@@ -40,14 +71,7 @@ async function post<T>(url: string, body: unknown, auth = false): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (auth) headers['Authorization'] = 'Bearer ' + getToken()
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`
-    try {
-      const d = await res.json()
-      if (d.detail) msg = d.detail
-    } catch { /* ignore */ }
-    throw new Error(msg)
-  }
+  if (!res.ok) await throwWithDetail(res)
   return res.json()
 }
 
@@ -74,7 +98,7 @@ export async function pollParseUrl(taskId: string): Promise<ParseTask> {
   const res = await fetch('/admin/parse-url/' + taskId, {
     headers: { Authorization: 'Bearer ' + getToken() },
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) await throwWithDetail(res)
   return res.json()
 }
 
@@ -128,7 +152,7 @@ export async function pollHealthCheck(taskId: string): Promise<HealthTask> {
   const res = await fetch('/admin/health-check/' + taskId, {
     headers: { Authorization: 'Bearer ' + getToken() },
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) await throwWithDetail(res)
   return res.json()
 }
 
@@ -153,7 +177,7 @@ export interface ChangeItem {
 
 async function authGet<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Authorization: 'Bearer ' + getToken() } })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) await throwWithDetail(res)
   return res.json()
 }
 
@@ -167,7 +191,7 @@ export async function updateDoc(id: string, text: string) {
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + getToken() },
     body: JSON.stringify({ text }),
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) await throwWithDetail(res)
   return res.json()
 }
 
@@ -176,7 +200,7 @@ export async function deleteDoc(id: string) {
     method: 'DELETE',
     headers: { Authorization: 'Bearer ' + getToken() },
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) await throwWithDetail(res)
   return res.json()
 }
 
@@ -219,7 +243,7 @@ export async function resolveCorrection(id: number, resolution: string) {
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + getToken() },
     body: JSON.stringify({ resolution }),
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) await throwWithDetail(res)
   return res.json()
 }
 
@@ -304,14 +328,7 @@ export interface RuleVersion {
 
 // 规则集接口的 4xx 必须把 detail 原样抛出：422 的 detail 是
 // 「规则集校验不通过：<pydantic 完整报错>」，里面的字段路径是定位问题的唯一线索。
-async function throwWithDetail(res: Response): Promise<never> {
-  let msg = `HTTP ${res.status}`
-  try {
-    const d = await res.json()
-    if (d.detail) msg = d.detail
-  } catch { /* ignore */ }
-  throw new Error(msg)
-}
+// （throwWithDetail 现在是全文件共用的，定义在顶部。）
 
 export async function getAdminRules(version?: number) {
   const url = '/rewardcash/admin/rules' + (version === undefined ? '' : '?version=' + version)

@@ -3,6 +3,9 @@
 // 令牌不是导航项。改成分区导航后它藏了两层，而新环境第一次打开时它是**唯一**的出路
 // ——`api.ts` 里除问答外所有请求都带 `Authorization`，没填就满屏 401。
 // 所以做成常驻状态栏：没填时变琥珀色并带呼吸动画，在哪一页都看得见。
+//
+// 「已连接」以后端认不认为准（App.tsx 的 verifyToken effect），不是「输入框非空」。
+// 早先只看非空：线上 ADMIN_TOKEN 与本地那份不同时，绿灯照亮，每个 /admin/* 却都 401。
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -10,6 +13,37 @@ import {
   Database, Percent, KeyRound, ChevronDown, type LucideIcon,
 } from 'lucide-react'
 import { ACCENTS, SECTION_ACCENT, type SectionId } from '../theme'
+
+/** empty=没填 · checking=校验中 · ok=后端认可 · bad=后端拒绝或连不上 */
+export type TokenState = 'empty' | 'checking' | 'ok' | 'bad'
+
+// 四态的文案与配色。accent 类名同样必须是字面量，不能拼接（Tailwind 3 只认源码里的字符串）。
+const TOKEN_UI: Record<TokenState, { label: string; dot: string; button: string; ping: boolean }> = {
+  empty: {
+    label: '未配置令牌',
+    dot: 'bg-amber-400',
+    button: 'bg-amber-500/10 text-amber-300 hover:bg-amber-500/15',
+    ping: true,
+  },
+  checking: {
+    label: '校验中…',
+    dot: 'bg-slate-400',
+    button: 'text-slate-400 hover:bg-slate-800/50',
+    ping: false,
+  },
+  ok: {
+    label: '已连接',
+    dot: 'bg-emerald-400',
+    button: 'text-slate-400 hover:bg-slate-800/50',
+    ping: false,
+  },
+  bad: {
+    label: '令牌无效',
+    dot: 'bg-rose-400',
+    button: 'bg-rose-500/10 text-rose-300 hover:bg-rose-500/15',
+    ping: true,
+  },
+}
 
 interface NavItem {
   id: SectionId
@@ -40,16 +74,19 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
 ]
 
 export function Sidebar({
-  section, onSection, pendingCount, token, onToken,
+  section, onSection, pendingCount, token, onToken, tokenState, tokenError,
 }: {
   section: SectionId
   onSection: (s: SectionId) => void
   pendingCount: number
   token: string
   onToken: (t: string) => void
+  tokenState: TokenState
+  tokenError: string
 }) {
   // 纯 UI 状态，与业务无关，所以留在本组件内而不是提到 App.tsx
   const [tokenOpen, setTokenOpen] = useState(false)
+  const tk = TOKEN_UI[tokenState]
 
   return (
     <div className="flex h-full flex-col bg-slate-950/70 backdrop-blur-xl">
@@ -107,24 +144,29 @@ export function Sidebar({
         <button
           onClick={() => setTokenOpen(v => !v)}
           className={`w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs transition
-            ${token
-              ? 'text-slate-400 hover:bg-slate-800/50'
-              : 'bg-amber-500/10 text-amber-300 hover:bg-amber-500/15'}`}
+            ${tk.button}`}
         >
           <span className="relative flex h-2 w-2 shrink-0">
-            {!token && (
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full
-                bg-amber-400 opacity-75" />
+            {tk.ping && (
+              <span className={`absolute inline-flex h-full w-full animate-ping rounded-full
+                opacity-75 ${tk.dot}`} />
             )}
-            <span className={`relative inline-flex h-2 w-2 rounded-full
-              ${token ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+            <span className={`relative inline-flex h-2 w-2 rounded-full ${tk.dot}`} />
           </span>
-          <span className="flex-1 text-left">{token ? '已连接' : '未配置令牌'}</span>
+          <span className="flex-1 text-left">{tk.label}</span>
           <ChevronDown
             size={14} strokeWidth={2}
             className={`transition-transform ${tokenOpen ? 'rotate-180' : ''}`}
           />
         </button>
+
+        {/* 后端给的 detail（如「未授权：ADMIN_TOKEN 不匹配。」）常驻显示，
+            不用展开也看得见——这是排查时唯一有用的那句话 */}
+        {tokenState === 'bad' && tokenError && (
+          <div className="mt-1.5 px-0.5 text-[10px] leading-relaxed text-rose-300/80">
+            {tokenError}
+          </div>
+        )}
 
         <AnimatePresence>
           {tokenOpen && (

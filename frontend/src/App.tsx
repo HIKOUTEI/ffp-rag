@@ -2,10 +2,10 @@
 //
 // 所有 useState 和 handler 都留在这里，分区组件是纯展示（props 进、回调出）。
 // 这样切区时 React 不会卸载状态——解析到一半去看纠错队列，回来片段还在。
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  startParseUrl, pollParseUrl, ingestParsed, chatConversation, getToken, setToken,
+  startParseUrl, pollParseUrl, ingestParsed, chatConversation, getToken, setToken, verifyToken,
   startHealthCheck, pollHealthCheck,
   listDocs, updateDoc, deleteDoc, listChanges,
   listCorrections, resolveCorrection,
@@ -15,6 +15,7 @@ import {
   type RuleSet, type RuleVersion,
 } from './api'
 import { Shell } from './layout/Shell'
+import type { TokenState } from './layout/Sidebar'
 import type { SectionId } from './theme'
 import { Workbench, type Row } from './sections/Workbench'
 import { Health } from './sections/Health'
@@ -26,6 +27,10 @@ export default function App() {
   const [section, setSection] = useState<SectionId>('workbench')
 
   const [token, setTok] = useState(getToken())
+  // 只存校验结果，四态在 render 期派生——结果里带上被校验的那串 token，
+  // 跟当前 token 不一致就说明还没校验过（初次打开、刚改完），即 checking。
+  const [tokenCheck, setTokenCheck] =
+    useState<{ token: string; ok: boolean; error: string } | null>(null)
   const [url, setUrl] = useState('')
   const [title, setTitle] = useState('')
   const [rows, setRows] = useState<Row[]>([])
@@ -40,6 +45,25 @@ export default function App() {
   const [asking, setAsking] = useState(false)
 
   function saveToken(t: string) { setTok(t); setToken(t) }
+
+  const fresh = tokenCheck?.token === token
+  const tokenState: TokenState =
+    !token ? 'empty' : !fresh ? 'checking' : tokenCheck.ok ? 'ok' : 'bad'
+  const tokenError = fresh && !tokenCheck.ok ? tokenCheck.error : ''
+
+  // 令牌校验：打开时校验一次，之后每次改动 debounce 600ms 再校验。
+  // debounce 是必须的——输入框受控，不防抖就会一个字符一个请求。
+  // cancelled 防止旧 token 的迟到结果写进来：它的 token 对不上当前值，
+  // 派生逻辑会把状态永久判成 checking。
+  useEffect(() => {
+    if (!token) return
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      const r = await verifyToken(token)
+      if (!cancelled) setTokenCheck({ token, ok: r.ok, error: r.error })
+    }, 600)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [token])
 
   async function handleParse() {
     if (!token) { setMsg({ type: 'err', text: '请先填入 ADMIN_TOKEN' }); return }
@@ -294,6 +318,7 @@ export default function App() {
     <Shell
       section={section} onSection={go} pendingCount={pendingCount}
       token={token} onToken={saveToken}
+      tokenState={tokenState} tokenError={tokenError}
       banner={banner}
     >
       {section === 'workbench' && (

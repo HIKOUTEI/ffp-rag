@@ -4,17 +4,20 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Menu, X } from 'lucide-react'
-import { Sidebar } from './Sidebar'
+import { Sidebar, type TokenState } from './Sidebar'
 import { ACCENTS, SECTION_ACCENT, type SectionId } from '../theme'
 
 export function Shell({
-  section, onSection, pendingCount, token, onToken, banner, children,
+  section, onSection, pendingCount, token, onToken, tokenState, tokenError,
+  banner, children,
 }: {
   section: SectionId
   onSection: (s: SectionId) => void
   pendingCount: number
   token: string
   onToken: (t: string) => void
+  tokenState: TokenState
+  tokenError: string
   /** 全局提示条（原 msg），跟着主区走，切页不影响 */
   banner?: React.ReactNode
   children: React.ReactNode
@@ -34,6 +37,7 @@ export function Shell({
         <Sidebar
           section={section} onSection={go} pendingCount={pendingCount}
           token={token} onToken={onToken}
+          tokenState={tokenState} tokenError={tokenError}
         />
       </aside>
 
@@ -54,6 +58,7 @@ export function Shell({
               <Sidebar
                 section={section} onSection={go} pendingCount={pendingCount}
                 token={token} onToken={onToken}
+                tokenState={tokenState} tokenError={tokenError}
               />
             </motion.aside>
           </>
