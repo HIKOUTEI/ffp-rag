@@ -141,8 +141,24 @@ def check_and_bump_feedback_quota(openid: str):
           f"今日反馈已达上限（{config.FEEDBACK_DAILY_LIMIT} 次），请明天再来。")
 
 
+# 控制台（`frontend/`）问答时用的伪 openid。控制台没有微信登录，手里只有
+# `ADMIN_TOKEN`，此前它发的 /chat 请求一律 401「未登录：缺少 token」。
+CONSOLE_OPENID = "console"
+
+
 def require_user_with_quota(authorization: str) -> str:
-    """校验登录 + 扣当日提问额度，返回 openid。供 /chat 系列依赖。"""
+    """校验登录 + 扣当日提问额度，返回 openid。供 /chat 系列依赖。
+
+    `ADMIN_TOKEN` 也放行，身份记为 `CONSOLE_OPENID`，且**不扣额度**——
+    它已经能 `DELETE /admin/docs/{id}` 删掉任意知识，再给它限日提问次数是纸糊的；
+    反过来，拿控制台批量验检索质量时被「今日提问已达上限」拦住是真实的妨碍。
+
+    只开在这一个函数里。`require_user()` 本身不认 `ADMIN_TOKEN`：`rail/` 那些接口
+    操作的是「某个人的行程」，放行等于让控制台拿着管理员令牌读写用户私有数据。
+    """
+    token = (authorization or "").removeprefix("Bearer ").strip()
+    if config.ADMIN_TOKEN and token == config.ADMIN_TOKEN:
+        return CONSOLE_OPENID
     openid = require_user(authorization)
     check_and_bump_quota(openid)
     return openid

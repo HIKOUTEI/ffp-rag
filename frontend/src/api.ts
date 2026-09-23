@@ -108,9 +108,13 @@ export function ingestParsed(fragments: Fragment[]) {
   )
 }
 
+// 问答走 admin token：控制台没有微信登录，后端 `require_user_with_quota` 为此
+// 专门认 ADMIN_TOKEN（`backend/app/auth.py` 的 CONSOLE_OPENID）。
+// 这里的 `true` 不能省——`post()` 的 auth 默认 false，省掉就一个头都不带，
+// 后端回 401「未登录：缺少 token，请重新登录。」
 export function chat(question: string) {
   return post<{ answer: string; sources: ChatSource[] }>(
-    '/chat', { question },
+    '/chat', { question }, true,
   )
 }
 
@@ -121,7 +125,7 @@ export interface ChatMessage {
 
 export function chatConversation(messages: ChatMessage[]) {
   return post<{ answer: string; sources: ChatSource[]; rewritten: string }>(
-    '/chat/conversation', { messages },
+    '/chat/conversation', { messages }, true,
   )
 }
 
