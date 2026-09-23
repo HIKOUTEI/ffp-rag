@@ -6,10 +6,21 @@ from app import config
 client = OpenAI(api_key=config.API_KEY, base_url=config.BASE_URL)
 
 
+# 单次 embedding 请求的最大条数。智谱 embedding-3 硬限 64（超了直接 400
+# 「input数组最大不得超过64条」），OpenAI/通义的上限都更宽松，取最小的那个即可。
+# 以前没分批也没炸，是因为 URL 摄入一篇文章顶多解析出十几条；`scripts/ingest_md.py`
+# 一次推 149 条语料片段才把这个坑踩出来。
+EMBED_BATCH = 64
+
+
 def embed(texts):
-    """批量 embed，返回 list[list[float]]。"""
-    resp = client.embeddings.create(model=config.EMBED_MODEL, input=texts)
-    return [d.embedding for d in resp.data]
+    """批量 embed，返回 list[list[float]]。超过 `EMBED_BATCH` 自动分批，顺序与入参一致。"""
+    out = []
+    for i in range(0, len(texts), EMBED_BATCH):
+        resp = client.embeddings.create(model=config.EMBED_MODEL,
+                                        input=texts[i:i + EMBED_BATCH])
+        out.extend(d.embedding for d in resp.data)
+    return out
 
 
 SYSTEM_PROMPT = (
